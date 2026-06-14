@@ -1,0 +1,51 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Database
+*.db
+*.sqlite3
+
+# Data and outputs (too large for git)
+backend/data/uploads/
+backend/data/outputs/
+gaussian-splatting/output/
+gaussian-splatting/data/
+*.ply
+*.mp4
+*.mov
+
+# Keep wound_test2 validated output structure but not the heavy files
+gaussian-splatting/output/wound_test2/point_cloud/
+gaussian-splatting/output/wound_test2/train/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+filelist.txt
+wound_salve.mp4
+data/ 
+data/ 
+gaussian-splatting/SIBR_viewers/ 
+gaussian-splatting/submodules/diff-gaussian-rasterization/third_party/ 
+gaussian-splatting/submodules/fused-ssim/ 
