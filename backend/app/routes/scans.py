@@ -61,6 +61,9 @@ def get_scan(scan_id: str, db: Session = Depends(get_db)):
         "status": scan.status,
         "created_at": scan.created_at,
         "completed_at": scan.completed_at,
+        "current_step": scan.current_step,
+        "current_step_name": scan.current_step_name,
+        "progress_percent": scan.progress_percent,
     }
 
 @router.get("/{scan_id}/measurements")
@@ -89,9 +92,8 @@ def get_ply(scan_id: str, db: Session = Depends(get_db)):
     if not scan.output_path:
         raise HTTPException(status_code=404, detail="No output available")
 
-    # Try wound-only first, fall back to full point cloud
-    wound_ply = os.path.join(scan.output_path, "point_cloud", "iteration_7000", "wound_only.ply")
-    full_ply = os.path.join(scan.output_path, "point_cloud", "iteration_7000", "point_cloud.ply")
+    wound_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "wound_only.ply")
+    full_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "point_cloud.ply")
 
     if os.path.exists(wound_ply):
         ply_path = wound_ply
@@ -111,7 +113,10 @@ def get_patient_scans(patient_id: str, db: Session = Depends(get_db)):
             "id": s.id,
             "video_filename": s.video_filename,
             "status": s.status,
-            "created_at": s.created_at
+            "created_at": s.created_at,
+            "current_step": s.current_step,
+            "current_step_name": s.current_step_name,
+            "progress_percent": s.progress_percent,
         }
         for s in scans
     ]
@@ -126,7 +131,10 @@ def get_queue(db: Session = Depends(get_db)):
             "video_filename": s.video_filename,
             "status": s.status,
             "created_at": s.created_at,
-            "completed_at": s.completed_at
+            "completed_at": s.completed_at,
+            "current_step": s.current_step,
+            "current_step_name": s.current_step_name,
+            "progress_percent": s.progress_percent,
         }
         for s in scans
     ]

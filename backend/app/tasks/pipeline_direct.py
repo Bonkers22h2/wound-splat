@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import re
 import threading
 from app.database import SessionLocal
 from app.models.db import Scan, Measurement, ScanStatus
@@ -13,12 +14,60 @@ GAUSSIAN_SPLATTING_DIR = os.getenv(
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+TRAIN_ITERATIONS = 15000
+
+STEP_NAMES = {
+    1: "Extracting frames",
+    2: "Running COLMAP (Structure-from-Motion)",
+    3: "Training 3D Gaussian Splatting",
+    4: "Rendering preview images",
+    5: "Segmenting wound tissue",
+    6: "Measuring wound dimensions",
+    7: "Generating PDF report",
+}
+
+def update_progress(scan_id, step, percent=0.0):
+    """Update scan progress in DB"""
+    db = SessionLocal()
+    try:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        if scan:
+            scan.current_step = step
+            scan.current_step_name = STEP_NAMES.get(step, "")
+            scan.progress_percent = percent
+            db.commit()
+    finally:
+        db.close()
+
+
 def run_pipeline(scan_id: str):
-    """Run in a background thread — no Celery needed."""
     thread = threading.Thread(target=_pipeline_task, args=(scan_id,))
     thread.daemon = True
     thread.start()
     return thread
+
+
+def run_with_progress(cmd, cwd, scan_id, step):
+    """Run a subprocess and parse 3DGS training progress from stdout in real-time."""
+    process = subprocess.Popen(
+        cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1, universal_newlines=True
+    )
+
+    # Matches tqdm-style output: "Training progress:  45%|####      | 3150/7000"
+    progress_pattern = re.compile(r"(\d+)%\|")
+
+    full_output = []
+    for line in process.stdout:
+        full_output.append(line)
+        match = progress_pattern.search(line)
+        if match:
+            percent = float(match.group(1))
+            update_progress(scan_id, step, percent)
+
+    process.wait()
+    return process.returncode, "".join(full_output)
+
 
 def _pipeline_task(scan_id: str):
     db = SessionLocal()
@@ -42,7 +91,7 @@ def _pipeline_task(scan_id: str):
         python = sys.executable
 
         # Step 1: Extract frames
-        print(f"[{scan_id}] Step 1: Extracting frames...")
+        update_progress(scan_id, 1, 0)
         result = subprocess.run([
             "ffmpeg", "-i", video_path,
             "-vf", "fps=2",
@@ -50,57 +99,61 @@ def _pipeline_task(scan_id: str):
         ], capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"ffmpeg failed: {result.stderr}")
+        update_progress(scan_id, 1, 100)
 
         # Step 2: COLMAP
-        print(f"[{scan_id}] Step 2: Running COLMAP...")
+        update_progress(scan_id, 2, 0)
         result = subprocess.run([
             python, f"{GAUSSIAN_SPLATTING_DIR}/convert.py",
             "-s", data_dir
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         if result.returncode != 0:
             raise Exception(f"COLMAP failed: {result.stderr}")
+        update_progress(scan_id, 2, 100)
 
-        # Step 3: Train 3DGS
-        print(f"[{scan_id}] Step 3: Training 3DGS...")
-        result = subprocess.run([
+        # Step 3: Train 3DGS (with live progress)
+        update_progress(scan_id, 3, 0)
+        returncode, output = run_with_progress([
             python, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
             "-s", data_dir,
             "-m", output_dir,
-            "--iterations", "7000",
-            "--save_iterations", "7000"
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
-        if result.returncode != 0:
-            raise Exception(f"3DGS training failed: {result.stderr}")
+            "--iterations", str(TRAIN_ITERATIONS),
+            "--save_iterations", str(TRAIN_ITERATIONS)
+        ], cwd=GAUSSIAN_SPLATTING_DIR, scan_id=scan_id, step=3)
+        if returncode != 0:
+            raise Exception(f"3DGS training failed: {output[-2000:]}")
+        update_progress(scan_id, 3, 100)
 
         # Step 4: Render
-        print(f"[{scan_id}] Step 4: Rendering...")
+        update_progress(scan_id, 4, 0)
         subprocess.run([
             python, f"{GAUSSIAN_SPLATTING_DIR}/render.py",
             "-m", output_dir
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+        update_progress(scan_id, 4, 100)
 
         # Step 5: Segment wound
-        print(f"[{scan_id}] Step 5: Segmenting wound...")
-        ply_path = f"{output_dir}/point_cloud/iteration_7000/point_cloud.ply"
-        wound_only_path = f"{output_dir}/point_cloud/iteration_7000/wound_only.ply"
-
+        update_progress(scan_id, 5, 0)
+        ply_path = f"{output_dir}/point_cloud/iteration_{TRAIN_ITERATIONS}/point_cloud.ply"
+        wound_only_path = f"{output_dir}/point_cloud/iteration_{TRAIN_ITERATIONS}/wound_only.ply"
         subprocess.run([
             python, f"{GAUSSIAN_SPLATTING_DIR}/wound_segment.py",
             "--ply", ply_path,
             "--output", wound_only_path
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+        update_progress(scan_id, 5, 100)
 
         # Step 6: Measure wound
-        print(f"[{scan_id}] Step 6: Measuring wound...")
+        update_progress(scan_id, 6, 0)
         result = subprocess.run([
             python, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
             "--ply", wound_only_path
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
-
         measurements = parse_measurements(result.stdout)
+        update_progress(scan_id, 6, 100)
 
         # Step 7: Generate report
-        print(f"[{scan_id}] Step 7: Generating report...")
+        update_progress(scan_id, 7, 0)
         try:
             sys.path.insert(0, BACKEND_DIR)
             from generate_report import generate_report
@@ -114,6 +167,7 @@ def _pipeline_task(scan_id: str):
             )
         except Exception as e:
             print(f"[{scan_id}] Report generation failed (non-critical): {e}")
+        update_progress(scan_id, 7, 100)
 
         # Save measurements
         measurement = Measurement(
@@ -142,6 +196,7 @@ def _pipeline_task(scan_id: str):
         print(f"[{scan_id}] Pipeline failed: {e}")
     finally:
         db.close()
+
 
 def parse_measurements(output: str) -> dict:
     measurements = {}

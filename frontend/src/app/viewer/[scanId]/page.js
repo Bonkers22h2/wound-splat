@@ -6,6 +6,7 @@ import Navbar from '../../components/Navbar'
 export default function ViewerPage() {
   const { scanId } = useParams()
   const mountRef = useRef(null)
+  const pointsRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [measurements, setMeasurements] = useState(null)
@@ -21,6 +22,21 @@ export default function ViewerPage() {
       const data = await res.json()
       setMeasurements(data)
     } catch {}
+  }
+
+  const rotateModel = (axis, degrees) => {
+    const points = pointsRef.current
+    if (!points) return
+    const rad = (degrees * Math.PI) / 180
+    if (axis === 'x') points.rotation.x += rad
+    if (axis === 'y') points.rotation.y += rad
+    if (axis === 'z') points.rotation.z += rad
+  }
+
+  const resetRotation = () => {
+    const points = pointsRef.current
+    if (!points) return
+    points.rotation.set(0, 0, 0)
   }
 
   const initViewer = async () => {
@@ -46,12 +62,10 @@ export default function ViewerPage() {
     renderer.setPixelRatio(window.devicePixelRatio)
     container.appendChild(renderer.domElement)
 
-    // Controls
+    // Controls - free rotate, zoom, pan (no auto-rotation)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 1.5
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6)
@@ -104,7 +118,12 @@ export default function ViewerPage() {
         const scale = 20 / maxDim
         points.scale.setScalar(scale)
 
-        scene.add(points)
+        // Wrap in a group so position offset + rotation don't conflict
+        const group = new THREE.Group()
+        group.add(points)
+        scene.add(group)
+        pointsRef.current = group
+
         camera.position.set(0, 0, 25)
         controls.update()
         setLoading(false)
@@ -142,6 +161,17 @@ export default function ViewerPage() {
     }
   }
 
+  const rotateBtnStyle = {
+    padding: '6px 10px',
+    fontSize: '12px',
+    borderRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.2)',
+    background: 'rgba(255,255,255,0.08)',
+    color: '#e5e7eb',
+    cursor: 'pointer',
+    fontWeight: 500
+  }
+
   return (
     <>
       <Navbar />
@@ -171,6 +201,34 @@ export default function ViewerPage() {
             }}>
               <div style={{ fontSize: '32px' }}>⚠️</div>
               <p style={{ fontWeight: 600 }}>{error}</p>
+            </div>
+          )}
+
+          {/* Rotation controls */}
+          {!loading && !error && (
+            <div style={{
+              position: 'absolute', top: '16px', left: '16px',
+              background: 'rgba(0,0,0,0.6)', borderRadius: '10px', padding: '10px',
+              display: 'flex', flexDirection: 'column', gap: '6px'
+            }}>
+              <p style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '2px', fontWeight: 600 }}>
+                ORIENTATION
+              </p>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('x', -90)}>X -90°</button>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('x', 90)}>X +90°</button>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('y', -90)}>Y -90°</button>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('y', 90)}>Y +90°</button>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('z', -90)}>Z -90°</button>
+                <button style={rotateBtnStyle} onClick={() => rotateModel('z', 90)}>Z +90°</button>
+              </div>
+              <button style={{ ...rotateBtnStyle, marginTop: '4px', textAlign: 'center' }} onClick={resetRotation}>
+                Reset
+              </button>
             </div>
           )}
 

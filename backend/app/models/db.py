@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import Column, String, Float, DateTime, Enum, ForeignKey, Text, Integer
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -30,6 +30,12 @@ class Scan(Base):
     completed_at = Column(DateTime, nullable=True)
     output_path = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
+
+    # Progress tracking
+    current_step = Column(Integer, default=0)        # 0-7
+    current_step_name = Column(String, nullable=True) # e.g. "Training 3DGS"
+    progress_percent = Column(Float, default=0.0)     # 0-100, used within step 3 (training)
+
     patient = relationship("Patient", back_populates="scans")
     measurements = relationship("Measurement", back_populates="scan", uselist=False)
 

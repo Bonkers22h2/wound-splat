@@ -117,7 +117,7 @@ export default function AdminPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#f9fafb' }}>
-                    {['Patient ID', 'Video', 'Status', 'Submitted', 'Completed'].map(h => (
+                    {['Patient ID', 'Video', 'Status', 'Progress', 'Submitted', 'Completed'].map(h => (
                       <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>{h}</th>
                     ))}
                   </tr>
@@ -134,6 +134,33 @@ export default function AdminPage() {
                         }}>
                           {scan.status}
                         </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', minWidth: '180px' }}>
+                        {scan.status === 'processing' ? (
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#374151', marginBottom: '4px' }}>
+                              {scan.current_step_name
+                                ? `Step ${scan.current_step}/7: ${scan.current_step_name}`
+                                : 'Starting...'}
+                              {scan.current_step === 3 && scan.progress_percent > 0
+                                ? ` (${Math.round(scan.progress_percent)}%)`
+                                : ''}
+                            </div>
+                            <div style={{ width: '100%', height: '6px', background: '#e5e7eb', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%',
+                                borderRadius: '999px',
+                                background: '#1e40af',
+                                width: scan.current_step
+                                  ? `${(((scan.current_step - 1) + (scan.progress_percent || 0) / 100) / 7) * 100}%`
+                                  : '0%',
+                                transition: 'width 0.5s ease'
+                              }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>
                         {new Date(scan.created_at).toLocaleString()}
