@@ -1,5 +1,6 @@
 from app.database import SessionLocal
 from app.models.db import Scan
+from app.tasks.pipeline_direct import TRAIN_ITERATIONS
 import os
 
 db = SessionLocal()
@@ -12,8 +13,9 @@ else:
     print(f"status: {scan.status}")
     print(f"output_path: {repr(scan.output_path)}")
     if scan.output_path:
-        wound_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "wound_only.ply")
-        full_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "point_cloud.ply")
+        iteration_dir = f"iteration_{TRAIN_ITERATIONS}"
+        wound_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "wound_only.ply")
+        full_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "point_cloud.ply")
         print(f"wound_only.ply exists: {os.path.exists(wound_ply)} -> {wound_ply}")
         print(f"point_cloud.ply exists: {os.path.exists(full_ply)} -> {full_ply}")
 

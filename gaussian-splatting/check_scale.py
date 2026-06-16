@@ -1,7 +1,10 @@
 import open3d as o3d
 import numpy as np
+from pathlib import Path
 
-pcd = o3d.io.read_point_cloud('output/wound_test2/point_cloud/iteration_7000/point_cloud.ply')
+GAUSSIAN_SPLATTING_DIR = Path(__file__).resolve().parent
+ply_path = GAUSSIAN_SPLATTING_DIR / 'output' / 'wound_test2' / 'point_cloud' / 'iteration_7000' / 'point_cloud.ply'
+pcd = o3d.io.read_point_cloud(str(ply_path))
 points = np.asarray(pcd.points)
 
 print('Total points:', len(points))

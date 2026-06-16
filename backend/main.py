@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-import os
+from app.paths import OUTPUT_DIR, UPLOAD_DIR
 
 app = FastAPI(title="Wound-Splat API", version="1.0.0")
 
@@ -18,8 +17,8 @@ app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(scans.router, prefix="/scans", tags=["scans"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 
-os.makedirs("data/uploads", exist_ok=True)
-os.makedirs("data/outputs", exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/")
 def root():

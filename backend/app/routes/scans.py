@@ -4,14 +4,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Scan, Patient, ScanStatus, Measurement
 from app.tasks.pipeline_direct import run_pipeline
+from app.tasks.pipeline_direct import TRAIN_ITERATIONS
+from app.paths import UPLOAD_DIR
 import uuid
 import os
 import shutil
 
 router = APIRouter()
 
-UPLOAD_DIR = "data/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.post("/upload/{patient_id}")
 async def upload_scan(
@@ -25,7 +26,7 @@ async def upload_scan(
 
     scan_id = str(uuid.uuid4())
     filename = f"{scan_id}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    file_path = UPLOAD_DIR / filename
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -34,7 +35,7 @@ async def upload_scan(
         id=scan_id,
         patient_id=patient_id,
         video_filename=file.filename,
-        video_path=os.path.abspath(file_path),
+        video_path=str(file_path.resolve()),
         status=ScanStatus.QUEUED
     )
     db.add(scan)
@@ -92,8 +93,9 @@ def get_ply(scan_id: str, db: Session = Depends(get_db)):
     if not scan.output_path:
         raise HTTPException(status_code=404, detail="No output available")
 
-    wound_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "wound_only.ply")
-    full_ply = os.path.join(scan.output_path, "point_cloud", "iteration_15000", "point_cloud.ply")
+    iteration_dir = f"iteration_{TRAIN_ITERATIONS}"
+    wound_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "wound_only.ply")
+    full_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "point_cloud.ply")
 
     if os.path.exists(wound_ply):
         ply_path = wound_ply

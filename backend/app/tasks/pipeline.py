@@ -1,17 +1,12 @@
-import os
 import subprocess
 import sys
 from celery_worker import celery_app
 from app.database import SessionLocal
 from app.models.db import Scan, Measurement, ScanStatus
+from app.paths import BACKEND_DIR, GAUSSIAN_SPLATTING_DIR
 from datetime import datetime
 
-GAUSSIAN_SPLATTING_DIR = os.getenv(
-    "GAUSSIAN_SPLATTING_DIR",
-    "C:/Users/bonkc/Documents/wound-splat/gaussian-splatting"
-)
-
-BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TRAIN_ITERATIONS = 7000
 
 @celery_app.task(bind=True)
 def process_wound_video(self, scan_id: str):
@@ -28,12 +23,12 @@ def process_wound_video(self, scan_id: str):
         db.commit()
 
         video_path = scan.video_path
-        output_dir = f"{GAUSSIAN_SPLATTING_DIR}/output/scan_{scan_id}"
-        data_dir = f"{GAUSSIAN_SPLATTING_DIR}/data/scan_{scan_id}"
-        input_dir = f"{data_dir}/input"
+        output_dir = GAUSSIAN_SPLATTING_DIR / "output" / f"scan_{scan_id}"
+        data_dir = GAUSSIAN_SPLATTING_DIR / "data" / f"scan_{scan_id}"
+        input_dir = data_dir / "input"
 
-        os.makedirs(input_dir, exist_ok=True)
-        os.makedirs(output_dir, exist_ok=True)
+        input_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         python = sys.executable
 
@@ -42,7 +37,7 @@ def process_wound_video(self, scan_id: str):
         result = subprocess.run([
             "ffmpeg", "-i", video_path,
             "-vf", "fps=2",
-            f"{input_dir}/%04d.jpg"
+            str(input_dir / "%04d.jpg")
         ], capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"ffmpeg failed: {result.stderr}")
@@ -50,66 +45,67 @@ def process_wound_video(self, scan_id: str):
         # Step 2: Run COLMAP
         print(f"[{scan_id}] Step 2: Running COLMAP...")
         result = subprocess.run([
-            python, f"{GAUSSIAN_SPLATTING_DIR}/convert.py",
-            "-s", data_dir
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            python, str(GAUSSIAN_SPLATTING_DIR / "convert.py"),
+            "-s", str(data_dir)
+        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
         if result.returncode != 0:
             raise Exception(f"COLMAP failed: {result.stderr}")
 
         # Step 3: Train 3DGS
         print(f"[{scan_id}] Step 3: Training 3DGS...")
         result = subprocess.run([
-            python, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
-            "-s", data_dir,
-            "-m", output_dir,
-            "--iterations", "7000",
-            "--save_iterations", "7000"
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            python, str(GAUSSIAN_SPLATTING_DIR / "train.py"),
+            "-s", str(data_dir),
+            "-m", str(output_dir),
+            "--iterations", str(TRAIN_ITERATIONS),
+            "--save_iterations", str(TRAIN_ITERATIONS)
+        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
         if result.returncode != 0:
             raise Exception(f"3DGS training failed: {result.stderr}")
 
         # Step 4: Render
         print(f"[{scan_id}] Step 4: Rendering...")
         subprocess.run([
-            python, f"{GAUSSIAN_SPLATTING_DIR}/render.py",
-            "-m", output_dir
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            python, str(GAUSSIAN_SPLATTING_DIR / "render.py"),
+            "-m", str(output_dir)
+        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
 
         # Step 5: Segment wound
         print(f"[{scan_id}] Step 5: Segmenting wound...")
-        ply_path = f"{output_dir}/point_cloud/iteration_7000/point_cloud.ply"
-        wound_only_path = f"{output_dir}/point_cloud/iteration_7000/wound_only.ply"
+        ply_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "point_cloud.ply"
+        wound_only_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "wound_only.ply"
 
         subprocess.run([
-            python, f"{GAUSSIAN_SPLATTING_DIR}/wound_segment.py",
-            "--ply", ply_path,
-            "--output", wound_only_path
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            python, str(GAUSSIAN_SPLATTING_DIR / "wound_segment.py"),
+            "--ply", str(ply_path),
+            "--output", str(wound_only_path)
+        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
 
         # Step 6: Measure wound
         print(f"[{scan_id}] Step 6: Measuring wound...")
         result = subprocess.run([
-            python, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
-            "--ply", wound_only_path
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            python, str(GAUSSIAN_SPLATTING_DIR / "wound_measure.py"),
+            "--ply", str(wound_only_path)
+        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
 
         measurements = parse_measurements(result.stdout)
 
         # Step 7: Generate PDF report
         print(f"[{scan_id}] Step 7: Generating report...")
         try:
-            sys.path.insert(0, BACKEND_DIR)
+            sys.path.insert(0, str(BACKEND_DIR))
             from generate_report import generate_report
             generate_report(
                 scan_id=scan_id,
                 patient_name=patient.name,
                 patient_code=patient.patient_code,
                 video_filename=scan.video_filename,
-                output_dir=output_dir,
+                output_dir=str(output_dir),
                 measurements={
                     **measurements,
                     "point_count": "N/A"
-                }
+                },
+                render_iteration=TRAIN_ITERATIONS
             )
             print(f"[{scan_id}] Report generated successfully.")
         except Exception as e:
@@ -128,7 +124,7 @@ def process_wound_video(self, scan_id: str):
 
         # Update scan status
         scan.status = ScanStatus.RENDERED
-        scan.output_path = output_dir
+        scan.output_path = str(output_dir)
         scan.completed_at = datetime.utcnow()
         db.commit()
 

@@ -1,5 +1,6 @@
 from app.database import SessionLocal
 from app.models.db import Scan, Measurement, ScanStatus
+from app.paths import GAUSSIAN_SPLATTING_DIR
 from datetime import datetime
 
 db = SessionLocal()
@@ -17,9 +18,9 @@ scan = Scan(
     id=scan_id,
     patient_id='270d4692-2b34-45e1-84d4-fcc89324c8c9',
     video_filename='wound_video.mp4',
-    video_path='C:/test.mp4',
+    video_path=str(GAUSSIAN_SPLATTING_DIR / "data" / "wound_test2" / "input.mp4"),
     status=ScanStatus.RENDERED,
-    output_path='C:/Users/bonkc/Documents/wound-splat/gaussian-splatting/output/wound_test2',
+    output_path=str(GAUSSIAN_SPLATTING_DIR / "output" / "wound_test2"),
     completed_at=datetime.utcnow()
 )
 
