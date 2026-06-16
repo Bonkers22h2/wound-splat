@@ -1,13 +1,20 @@
+import os
 import subprocess
 import sys
 import re
 import threading
 from app.database import SessionLocal
 from app.models.db import Scan, Measurement, ScanStatus
-from app.paths import BACKEND_DIR, GAUSSIAN_SPLATTING_DIR
 from datetime import datetime
 
-TRAIN_ITERATIONS = 15000
+GAUSSIAN_SPLATTING_DIR = os.getenv(
+    "GAUSSIAN_SPLATTING_DIR",
+    "C:/Users/bonkc/Documents/wound-splat/gaussian-splatting"
+)
+
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+TRAIN_ITERATIONS = 7000
 
 STEP_NAMES = {
     1: "Extracting frames",
@@ -28,6 +35,23 @@ def update_progress(scan_id, step, percent=0.0):
             scan.current_step = step
             scan.current_step_name = STEP_NAMES.get(step, "")
             scan.progress_percent = percent
+            db.commit()
+    finally:
+        db.close()
+
+
+def update_registration_stats(scan_id, frames_extracted, frames_registered):
+    """Store frame registration counts and computed rate in DB"""
+    db = SessionLocal()
+    try:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        if scan:
+            scan.frames_extracted = frames_extracted
+            scan.frames_registered = frames_registered
+            if frames_extracted > 0:
+                scan.registration_rate = round((frames_registered / frames_extracted) * 100, 1)
+            else:
+                scan.registration_rate = None
             db.commit()
     finally:
         db.close()
@@ -62,6 +86,18 @@ def run_with_progress(cmd, cwd, scan_id, step):
     return process.returncode, "".join(full_output)
 
 
+def get_latest_iteration_dir(output_dir):
+    """Find the highest iteration_* folder under output_dir/point_cloud"""
+    pc_dir = os.path.join(output_dir, "point_cloud")
+    if not os.path.isdir(pc_dir):
+        return None
+    iter_folders = [d for d in os.listdir(pc_dir) if d.startswith("iteration_")]
+    if not iter_folders:
+        return None
+    iter_folders.sort(key=lambda x: int(x.split("_")[1]), reverse=True)
+    return os.path.join(pc_dir, iter_folders[0])
+
+
 def _pipeline_task(scan_id: str):
     db = SessionLocal()
     try:
@@ -74,12 +110,13 @@ def _pipeline_task(scan_id: str):
         db.commit()
 
         video_path = scan.video_path
-        output_dir = GAUSSIAN_SPLATTING_DIR / "output" / f"scan_{scan_id}"
-        data_dir = GAUSSIAN_SPLATTING_DIR / "data" / f"scan_{scan_id}"
-        input_dir = data_dir / "input"
+        output_dir = f"{GAUSSIAN_SPLATTING_DIR}/output/scan_{scan_id}"
+        data_dir = f"{GAUSSIAN_SPLATTING_DIR}/data/scan_{scan_id}"
+        input_dir = f"{data_dir}/input"
+        images_dir = f"{data_dir}/images"
 
-        input_dir.mkdir(parents=True, exist_ok=True)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        os.makedirs(input_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         python = sys.executable
 
@@ -88,7 +125,7 @@ def _pipeline_task(scan_id: str):
         result = subprocess.run([
             "ffmpeg", "-i", video_path,
             "-vf", "fps=2",
-            str(input_dir / "%04d.jpg")
+            f"{input_dir}/%04d.jpg"
         ], capture_output=True, text=True)
         if result.returncode != 0:
             raise Exception(f"ffmpeg failed: {result.stderr}")
@@ -97,22 +134,41 @@ def _pipeline_task(scan_id: str):
         # Step 2: COLMAP
         update_progress(scan_id, 2, 0)
         result = subprocess.run([
-            python, str(GAUSSIAN_SPLATTING_DIR / "convert.py"),
-            "-s", str(data_dir)
-        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
+            python, f"{GAUSSIAN_SPLATTING_DIR}/convert.py",
+            "-s", data_dir
+        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         if result.returncode != 0:
             raise Exception(f"COLMAP failed: {result.stderr}")
         update_progress(scan_id, 2, 100)
 
+        # Calculate registration rate: frames extracted vs frames COLMAP registered
+        try:
+            frames_extracted = len([
+                f for f in os.listdir(input_dir)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ])
+        except FileNotFoundError:
+            frames_extracted = 0
+
+        try:
+            frames_registered = len([
+                f for f in os.listdir(images_dir)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ])
+        except FileNotFoundError:
+            frames_registered = 0
+
+        update_registration_stats(scan_id, frames_extracted, frames_registered)
+
         # Step 3: Train 3DGS (with live progress)
         update_progress(scan_id, 3, 0)
         returncode, output = run_with_progress([
-            python, str(GAUSSIAN_SPLATTING_DIR / "train.py"),
-            "-s", str(data_dir),
-            "-m", str(output_dir),
+            python, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
+            "-s", data_dir,
+            "-m", output_dir,
             "--iterations", str(TRAIN_ITERATIONS),
             "--save_iterations", str(TRAIN_ITERATIONS)
-        ], cwd=str(GAUSSIAN_SPLATTING_DIR), scan_id=scan_id, step=3)
+        ], cwd=GAUSSIAN_SPLATTING_DIR, scan_id=scan_id, step=3)
         if returncode != 0:
             raise Exception(f"3DGS training failed: {output[-2000:]}")
         update_progress(scan_id, 3, 100)
@@ -120,44 +176,47 @@ def _pipeline_task(scan_id: str):
         # Step 4: Render
         update_progress(scan_id, 4, 0)
         subprocess.run([
-            python, str(GAUSSIAN_SPLATTING_DIR / "render.py"),
-            "-m", str(output_dir)
-        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
+            python, f"{GAUSSIAN_SPLATTING_DIR}/render.py",
+            "-m", output_dir
+        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         update_progress(scan_id, 4, 100)
 
-        # Step 5: Segment wound
+        # Step 5: Segment wound (dynamically find the iteration folder)
         update_progress(scan_id, 5, 0)
-        ply_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "point_cloud.ply"
-        wound_only_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "wound_only.ply"
+        iter_dir = get_latest_iteration_dir(output_dir)
+        if iter_dir is None:
+            raise Exception("No iteration_* output folder found after training")
+        ply_path = os.path.join(iter_dir, "point_cloud.ply")
+        wound_only_path = os.path.join(iter_dir, "wound_only.ply")
         subprocess.run([
-            python, str(GAUSSIAN_SPLATTING_DIR / "wound_segment.py"),
-            "--ply", str(ply_path),
-            "--output", str(wound_only_path)
-        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
+            python, f"{GAUSSIAN_SPLATTING_DIR}/wound_segment.py",
+            "--ply", ply_path,
+            "--output", wound_only_path
+        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         update_progress(scan_id, 5, 100)
 
         # Step 6: Measure wound
         update_progress(scan_id, 6, 0)
         result = subprocess.run([
-            python, str(GAUSSIAN_SPLATTING_DIR / "wound_measure.py"),
-            "--ply", str(wound_only_path)
-        ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
+            python, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
+            "--ply", wound_only_path
+        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         measurements = parse_measurements(result.stdout)
         update_progress(scan_id, 6, 100)
 
         # Step 7: Generate report
         update_progress(scan_id, 7, 0)
         try:
-            sys.path.insert(0, str(BACKEND_DIR))
+            sys.path.insert(0, BACKEND_DIR)
             from generate_report import generate_report
             generate_report(
                 scan_id=scan_id,
                 patient_name=patient.name,
                 patient_code=patient.patient_code,
                 video_filename=scan.video_filename,
-                output_dir=str(output_dir),
+                output_dir=output_dir,
                 measurements={**measurements, "point_count": "N/A"},
-                render_iteration=TRAIN_ITERATIONS
+                registration_rate=scan.registration_rate
             )
         except Exception as e:
             print(f"[{scan_id}] Report generation failed (non-critical): {e}")
@@ -175,7 +234,7 @@ def _pipeline_task(scan_id: str):
         db.add(measurement)
 
         scan.status = ScanStatus.RENDERED
-        scan.output_path = str(output_dir)
+        scan.output_path = output_dir
         scan.completed_at = datetime.utcnow()
         db.commit()
 

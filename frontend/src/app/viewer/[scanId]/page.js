@@ -90,13 +90,13 @@ export default function ViewerPage() {
         let material
         if (geometry.hasAttribute('color')) {
           material = new THREE.PointsMaterial({
-            size: 0.08,
+            size: 0.15,
             vertexColors: true,
             sizeAttenuation: true
           })
         } else {
           material = new THREE.PointsMaterial({
-            size: 0.08,
+            size: 0.15,
             color: 0x1D9E75,
             sizeAttenuation: true
           })
@@ -279,11 +279,17 @@ export default function ViewerPage() {
 
               <div style={{ marginBottom: '1.5rem' }}>
                 <p style={{ fontSize: '11px', fontWeight: 700, color: '#0F6E56', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
-                  Accuracy
+                  Reconstruction Quality
                 </p>
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
-                  <p style={{ fontSize: '28px', fontWeight: 700, color: '#0F6E56' }}>85.8%</p>
-                  <p style={{ fontSize: '12px', color: '#6b7280' }}>Reconstruction accuracy</p>
+                  <p style={{ fontSize: '28px', fontWeight: 700, color: '#0F6E56' }}>
+                    {measurements.registration_rate != null ? `${measurements.registration_rate}%` : 'N/A'}
+                  </p>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                    {measurements.frames_registered != null && measurements.frames_extracted != null
+                      ? `${measurements.frames_registered} of ${measurements.frames_extracted} frames used`
+                      : 'Frame registration rate'}
+                  </p>
                 </div>
               </div>
             </>

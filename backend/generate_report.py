@@ -89,7 +89,7 @@ def get_recommendation(surface_area, volume, max_depth):
 
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
-                    output_dir, measurements, template_dir=None, render_iteration=15000):
+                    output_dir, measurements, template_dir=None, registration_rate=None):
 
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -180,9 +180,10 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
     story.append(metrics_table)
     story.append(Spacer(1, 0.2*cm))
 
+    accuracy_display = f'{registration_rate:.1f}%' if registration_rate is not None else 'N/A'
     secondary_data = [
         ['Wound Width', f'{width:.2f} cm', 'Wound Height', f'{height:.2f} cm'],
-        ['Reconstruction Accuracy', '85.8%', 'Points Reconstructed', measurements.get("point_count", "N/A")],
+        ['Reconstruction Quality', accuracy_display, 'Points Reconstructed', measurements.get("point_count", "N/A")],
     ]
     sec_table = Table(secondary_data, colWidths=[4*cm, 4*cm, 4*cm, 5.5*cm])
     sec_table.setStyle(TableStyle([
@@ -198,8 +199,13 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
     story.append(sec_table)
 
     # ── RENDER IMAGES ────────────────────────────────────────────────
-    renders_dir = os.path.join(output_dir, "train", f"ours_{render_iteration}", "renders")
-    if os.path.exists(renders_dir):
+    renders_base = os.path.join(output_dir, "train")
+    renders_dir = None
+    if os.path.isdir(renders_base):
+        candidates = sorted(glob.glob(os.path.join(renders_base, "ours_*", "renders")))
+        if candidates:
+            renders_dir = candidates[-1]
+    if renders_dir and os.path.exists(renders_dir):
         section_title("3D Reconstructed Views")
         image_files = sorted(glob.glob(os.path.join(renders_dir, "*.png")))[:3]
         if image_files:
@@ -259,10 +265,16 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
     story.append(Spacer(1, 0.3*cm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER))
     story.append(Spacer(1, 0.2*cm))
+    accuracy_note = (
+        f"Reconstruction quality for this scan was {registration_rate:.1f}% "
+        "(based on the proportion of video frames successfully used in 3D reconstruction). "
+        if registration_rate is not None else
+        "Reconstruction quality for this scan could not be determined. "
+    )
     disclaimer = (
         "<b>Disclaimer:</b> This report is generated automatically by the Wound-Splat 3D reconstruction system "
         "for monitoring purposes only. It is not a substitute for professional clinical diagnosis or treatment. "
-        "All measurements are estimates based on 3D Gaussian Splatting reconstruction with an average accuracy of 85.8%. "
+        f"All measurements are estimates based on 3D Gaussian Splatting reconstruction. {accuracy_note}"
         "Please consult a qualified healthcare provider for clinical decisions."
     )
     story.append(Paragraph(disclaimer, ParagraphStyle('d', fontSize=8, textColor=GRAY, leading=12)))
@@ -278,9 +290,8 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
 
 
 if __name__ == "__main__":
-    from app.paths import GAUSSIAN_SPLATTING_DIR
-
-    output_dir = GAUSSIAN_SPLATTING_DIR / "output" / "wound_test2"
+    gs_dir = "C:/Users/bonkc/Documents/wound-splat/gaussian-splatting"
+    output_dir = f"{gs_dir}/output/wound_test2"
     measurements = {
         "surface_area_cm2": 3.26,
         "volume_cm3": 0.27,
@@ -294,6 +305,6 @@ if __name__ == "__main__":
         patient_name="Juan dela Cruz",
         patient_code="PT-001",
         video_filename="wound_video.mp4",
-        output_dir=str(output_dir),
+        output_dir=output_dir,
         measurements=measurements
     )

@@ -4,15 +4,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Scan, Patient, ScanStatus, Measurement
 from app.tasks.pipeline_direct import run_pipeline
-from app.tasks.pipeline_direct import TRAIN_ITERATIONS
-from app.paths import UPLOAD_DIR
 import uuid
 import os
 import shutil
 
 router = APIRouter()
 
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = "data/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload/{patient_id}")
 async def upload_scan(
@@ -26,7 +25,7 @@ async def upload_scan(
 
     scan_id = str(uuid.uuid4())
     filename = f"{scan_id}_{file.filename}"
-    file_path = UPLOAD_DIR / filename
+    file_path = os.path.join(UPLOAD_DIR, filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -35,7 +34,7 @@ async def upload_scan(
         id=scan_id,
         patient_id=patient_id,
         video_filename=file.filename,
-        video_path=str(file_path.resolve()),
+        video_path=os.path.abspath(file_path),
         status=ScanStatus.QUEUED
     )
     db.add(scan)
@@ -65,6 +64,9 @@ def get_scan(scan_id: str, db: Session = Depends(get_db)):
         "current_step": scan.current_step,
         "current_step_name": scan.current_step_name,
         "progress_percent": scan.progress_percent,
+        "frames_extracted": scan.frames_extracted,
+        "frames_registered": scan.frames_registered,
+        "registration_rate": scan.registration_rate,
     }
 
 @router.get("/{scan_id}/measurements")
@@ -82,7 +84,10 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
         "volume_cm3": m.volume_cm3,
         "max_depth_mm": m.max_depth_mm,
         "width_cm": m.width_cm,
-        "height_cm": m.height_cm
+        "height_cm": m.height_cm,
+        "registration_rate": scan.registration_rate,
+        "frames_extracted": scan.frames_extracted,
+        "frames_registered": scan.frames_registered,
     }
 
 @router.get("/{scan_id}/ply")
@@ -93,9 +98,20 @@ def get_ply(scan_id: str, db: Session = Depends(get_db)):
     if not scan.output_path:
         raise HTTPException(status_code=404, detail="No output available")
 
-    iteration_dir = f"iteration_{TRAIN_ITERATIONS}"
-    wound_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "wound_only.ply")
-    full_ply = os.path.join(scan.output_path, "point_cloud", iteration_dir, "point_cloud.ply")
+    pc_dir = os.path.join(scan.output_path, "point_cloud")
+    if not os.path.isdir(pc_dir):
+        raise HTTPException(status_code=404, detail="point_cloud directory not found")
+
+    # Find the highest iteration_* folder (works regardless of training iteration count)
+    iter_folders = [d for d in os.listdir(pc_dir) if d.startswith("iteration_")]
+    if not iter_folders:
+        raise HTTPException(status_code=404, detail="No iteration folder found")
+
+    iter_folders.sort(key=lambda x: int(x.split("_")[1]), reverse=True)
+    latest_iter = iter_folders[0]
+
+    wound_ply = os.path.join(pc_dir, latest_iter, "wound_only.ply")
+    full_ply = os.path.join(pc_dir, latest_iter, "point_cloud.ply")
 
     if os.path.exists(wound_ply):
         ply_path = wound_ply
@@ -119,6 +135,7 @@ def get_patient_scans(patient_id: str, db: Session = Depends(get_db)):
             "current_step": s.current_step,
             "current_step_name": s.current_step_name,
             "progress_percent": s.progress_percent,
+            "registration_rate": s.registration_rate,
         }
         for s in scans
     ]
@@ -137,6 +154,7 @@ def get_queue(db: Session = Depends(get_db)):
             "current_step": s.current_step,
             "current_step_name": s.current_step_name,
             "progress_percent": s.progress_percent,
+            "registration_rate": s.registration_rate,
         }
         for s in scans
     ]
