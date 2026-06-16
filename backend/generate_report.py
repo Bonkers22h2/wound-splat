@@ -89,7 +89,8 @@ def get_recommendation(surface_area, volume, max_depth):
 
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
-                    output_dir, measurements, template_dir=None, registration_rate=None):
+                    output_dir, measurements, template_dir=None, registration_rate=None,
+                    render_iteration=15000):
 
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -290,8 +291,9 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
 
 
 if __name__ == "__main__":
-    gs_dir = "C:/Users/bonkc/Documents/wound-splat/gaussian-splatting"
-    output_dir = f"{gs_dir}/output/wound_test2"
+    from app.paths import GAUSSIAN_SPLATTING_DIR
+
+    output_dir = GAUSSIAN_SPLATTING_DIR / "output" / "wound_test2"
     measurements = {
         "surface_area_cm2": 3.26,
         "volume_cm3": 0.27,
@@ -305,6 +307,6 @@ if __name__ == "__main__":
         patient_name="Juan dela Cruz",
         patient_code="PT-001",
         video_filename="wound_video.mp4",
-        output_dir=output_dir,
+        output_dir=str(output_dir),
         measurements=measurements
     )
