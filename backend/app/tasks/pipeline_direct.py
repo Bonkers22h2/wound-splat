@@ -14,7 +14,7 @@ GAUSSIAN_SPLATTING_DIR = os.getenv(
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TRAIN_ITERATIONS = 15000
+TRAIN_ITERATIONS = 7000
 
 STEP_NAMES = {
     1: "Extracting frames",
@@ -35,6 +35,23 @@ def update_progress(scan_id, step, percent=0.0):
             scan.current_step = step
             scan.current_step_name = STEP_NAMES.get(step, "")
             scan.progress_percent = percent
+            db.commit()
+    finally:
+        db.close()
+
+
+def update_registration_stats(scan_id, frames_extracted, frames_registered):
+    """Store frame registration counts and computed rate in DB"""
+    db = SessionLocal()
+    try:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        if scan:
+            scan.frames_extracted = frames_extracted
+            scan.frames_registered = frames_registered
+            if frames_extracted > 0:
+                scan.registration_rate = round((frames_registered / frames_extracted) * 100, 1)
+            else:
+                scan.registration_rate = None
             db.commit()
     finally:
         db.close()
@@ -69,6 +86,18 @@ def run_with_progress(cmd, cwd, scan_id, step):
     return process.returncode, "".join(full_output)
 
 
+def get_latest_iteration_dir(output_dir):
+    """Find the highest iteration_* folder under output_dir/point_cloud"""
+    pc_dir = os.path.join(output_dir, "point_cloud")
+    if not os.path.isdir(pc_dir):
+        return None
+    iter_folders = [d for d in os.listdir(pc_dir) if d.startswith("iteration_")]
+    if not iter_folders:
+        return None
+    iter_folders.sort(key=lambda x: int(x.split("_")[1]), reverse=True)
+    return os.path.join(pc_dir, iter_folders[0])
+
+
 def _pipeline_task(scan_id: str):
     db = SessionLocal()
     try:
@@ -84,6 +113,7 @@ def _pipeline_task(scan_id: str):
         output_dir = f"{GAUSSIAN_SPLATTING_DIR}/output/scan_{scan_id}"
         data_dir = f"{GAUSSIAN_SPLATTING_DIR}/data/scan_{scan_id}"
         input_dir = f"{data_dir}/input"
+        images_dir = f"{data_dir}/images"
 
         os.makedirs(input_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
@@ -111,6 +141,25 @@ def _pipeline_task(scan_id: str):
             raise Exception(f"COLMAP failed: {result.stderr}")
         update_progress(scan_id, 2, 100)
 
+        # Calculate registration rate: frames extracted vs frames COLMAP registered
+        try:
+            frames_extracted = len([
+                f for f in os.listdir(input_dir)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ])
+        except FileNotFoundError:
+            frames_extracted = 0
+
+        try:
+            frames_registered = len([
+                f for f in os.listdir(images_dir)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ])
+        except FileNotFoundError:
+            frames_registered = 0
+
+        update_registration_stats(scan_id, frames_extracted, frames_registered)
+
         # Step 3: Train 3DGS (with live progress)
         update_progress(scan_id, 3, 0)
         returncode, output = run_with_progress([
@@ -132,10 +181,13 @@ def _pipeline_task(scan_id: str):
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
         update_progress(scan_id, 4, 100)
 
-        # Step 5: Segment wound
+        # Step 5: Segment wound (dynamically find the iteration folder)
         update_progress(scan_id, 5, 0)
-        ply_path = f"{output_dir}/point_cloud/iteration_{TRAIN_ITERATIONS}/point_cloud.ply"
-        wound_only_path = f"{output_dir}/point_cloud/iteration_{TRAIN_ITERATIONS}/wound_only.ply"
+        iter_dir = get_latest_iteration_dir(output_dir)
+        if iter_dir is None:
+            raise Exception("No iteration_* output folder found after training")
+        ply_path = os.path.join(iter_dir, "point_cloud.ply")
+        wound_only_path = os.path.join(iter_dir, "wound_only.ply")
         subprocess.run([
             python, f"{GAUSSIAN_SPLATTING_DIR}/wound_segment.py",
             "--ply", ply_path,
@@ -163,7 +215,8 @@ def _pipeline_task(scan_id: str):
                 patient_code=patient.patient_code,
                 video_filename=scan.video_filename,
                 output_dir=output_dir,
-                measurements={**measurements, "point_count": "N/A"}
+                measurements={**measurements, "point_count": "N/A"},
+                registration_rate=scan.registration_rate
             )
         except Exception as e:
             print(f"[{scan_id}] Report generation failed (non-critical): {e}")

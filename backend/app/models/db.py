@@ -36,6 +36,11 @@ class Scan(Base):
     current_step_name = Column(String, nullable=True) # e.g. "Training 3DGS"
     progress_percent = Column(Float, default=0.0)     # 0-100, used within step 3 (training)
 
+    # Reconstruction quality (replaces hardcoded 85.8%)
+    frames_extracted = Column(Integer, nullable=True)   # total frames from ffmpeg
+    frames_registered = Column(Integer, nullable=True)  # frames COLMAP successfully registered
+    registration_rate = Column(Float, nullable=True)    # frames_registered / frames_extracted * 100
+
     patient = relationship("Patient", back_populates="scans")
     measurements = relationship("Measurement", back_populates="scan", uselist=False)
 
