@@ -7,6 +7,8 @@ export default function ViewerPage() {
   const { scanId } = useParams()
   const mountRef = useRef(null)
   const pointsRef = useRef(null)
+  const cameraRef = useRef(null)
+  const controlsRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [measurements, setMeasurements] = useState(null)
@@ -35,8 +37,15 @@ export default function ViewerPage() {
 
   const resetRotation = () => {
     const points = pointsRef.current
-    if (!points) return
-    points.rotation.set(0, 0, 0)
+    if (points) points.rotation.set(0, 0, 0)
+    // Also bring the camera back to the default framing of the wound
+    const camera = cameraRef.current
+    const controls = controlsRef.current
+    if (camera && controls) {
+      camera.position.set(0, 0, 22)
+      controls.target.set(0, 0, 0)
+      controls.update()
+    }
   }
 
   const initViewer = async () => {
@@ -66,6 +75,8 @@ export default function ViewerPage() {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
+    cameraRef.current = camera
+    controlsRef.current = controls
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6)
@@ -90,13 +101,13 @@ export default function ViewerPage() {
         let material
         if (geometry.hasAttribute('color')) {
           material = new THREE.PointsMaterial({
-            size: 0.15,
+            size: 0.25,
             vertexColors: true,
             sizeAttenuation: true
           })
         } else {
           material = new THREE.PointsMaterial({
-            size: 0.15,
+            size: 0.25,
             color: 0x1D9E75,
             sizeAttenuation: true
           })
@@ -104,27 +115,35 @@ export default function ViewerPage() {
 
         const points = new THREE.Points(geometry, material)
 
-        // Center the geometry
+        // Recenter the ACTUAL vertices on the origin (translate the geometry,
+        // not the object) so the wound sits exactly at the orbit pivot.
         geometry.computeBoundingBox()
         const box = geometry.boundingBox
         const center = new THREE.Vector3()
         box.getCenter(center)
-        points.position.sub(center)
+        geometry.translate(-center.x, -center.y, -center.z)
 
-        // Scale to fit view
+        // Normalize size so the wound fills the view regardless of scan scale.
+        // Scaling now happens around the origin, so the wound stays centered.
         const size = new THREE.Vector3()
         box.getSize(size)
-        const maxDim = Math.max(size.x, size.y, size.z)
-        const scale = 20 / maxDim
+        const maxDim = Math.max(size.x, size.y, size.z) || 1
+        const scale = 14 / maxDim
         points.scale.setScalar(scale)
 
-        // Wrap in a group so position offset + rotation don't conflict
+        // Wrap in a group so the orientation buttons rotate around the centre
         const group = new THREE.Group()
         group.add(points)
         scene.add(group)
         pointsRef.current = group
 
-        camera.position.set(0, 0, 25)
+        // Aim the camera AND the orbit pivot at the wound centre (origin),
+        // so dragging spins the wound in place instead of swinging it around.
+        controls.target.set(0, 0, 0)
+        controls.minDistance = 5
+        controls.maxDistance = 60
+        controls.rotateSpeed = 0.9
+        camera.position.set(0, 0, 22)
         controls.update()
         setLoading(false)
       },

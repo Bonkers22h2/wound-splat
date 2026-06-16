@@ -14,7 +14,7 @@ GAUSSIAN_SPLATTING_DIR = os.getenv(
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TRAIN_ITERATIONS = 7000
+TRAIN_ITERATIONS = 10000
 
 STEP_NAMES = {
     1: "Extracting frames",
