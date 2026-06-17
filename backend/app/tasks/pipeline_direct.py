@@ -14,11 +14,23 @@ GAUSSIAN_SPLATTING_DIR = os.getenv(
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TRAIN_ITERATIONS = 10000
+TRAIN_ITERATIONS = 30000
+
+# Downscale training images by this factor (-r). 2 = half-resolution each side
+# (~4x fewer pixels) -> much lower VRAM + faster training on the 6GB RTX 4050,
+# at a minor detail cost. Set to 1 for full resolution on a bigger GPU.
+TRAIN_RESOLUTION = 2
+
+# Final weight of the AI-depth regularization. 3DGS's default decays to 0.01,
+# which lets smooth/low-texture areas thin back out (re-open hollows) late in
+# training. Holding it higher (0.2) keeps the depth prior filling those areas
+# through the whole run. Raise toward ~0.5 for even more aggressive filling.
+DEPTH_L1_WEIGHT_FINAL = 0.2
 
 STEP_NAMES = {
     1: "Extracting frames",
     2: "Running COLMAP (Structure-from-Motion)",
+    2.5: "Generating AI depth maps (Depth Anything V2)",
     3: "Training 3D Gaussian Splatting",
     4: "Rendering preview images",
     5: "Segmenting wound tissue",
@@ -160,15 +172,53 @@ def _pipeline_task(scan_id: str):
 
         update_registration_stats(scan_id, frames_extracted, frames_registered)
 
-        # Step 3: Train 3DGS (with live progress)
+        # Step 2.5: AI monocular depth (Depth Anything V2) -> depth prior for training.
+        # Gives the optimizer geometry on smooth/low-texture surfaces that
+        # photogrammetry leaves hollow. Non-critical: if it fails, we simply
+        # train without the depth prior instead of failing the whole scan.
+        update_progress(scan_id, 2.5, 0)
+        depths_dir = f"{data_dir}/depths"
+        os.makedirs(depths_dir, exist_ok=True)
+        depth_ok = False
+        try:
+            dep = subprocess.run([
+                python, f"{GAUSSIAN_SPLATTING_DIR}/generate_depth.py",
+                "--images", images_dir,
+                "--output", depths_dir
+            ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+            if dep.returncode == 0:
+                scale = subprocess.run([
+                    python, f"{GAUSSIAN_SPLATTING_DIR}/utils/make_depth_scale.py",
+                    "--base_dir", data_dir,
+                    "--depths_dir", depths_dir,
+                    "--model_type", "bin"
+                ], capture_output=True, text=True,
+                    cwd=os.path.join(GAUSSIAN_SPLATTING_DIR, "utils"))
+                depth_ok = scale.returncode == 0
+                if not depth_ok:
+                    print(f"[{scan_id}] depth scale alignment failed (non-critical): {scale.stderr[-1000:]}")
+            else:
+                print(f"[{scan_id}] depth generation failed (non-critical): {dep.stderr[-1000:]}")
+        except Exception as e:
+            print(f"[{scan_id}] depth step error (non-critical): {e}")
+        update_progress(scan_id, 2.5, 100)
+
+        # Step 3: Train 3DGS (with live progress). Add the depth prior (-d depths)
+        # only if step 2.5 produced a valid depth_params.json.
         update_progress(scan_id, 3, 0)
-        returncode, output = run_with_progress([
+        train_cmd = [
             python, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
             "-s", data_dir,
             "-m", output_dir,
+            "-r", str(TRAIN_RESOLUTION),
             "--iterations", str(TRAIN_ITERATIONS),
             "--save_iterations", str(TRAIN_ITERATIONS)
-        ], cwd=GAUSSIAN_SPLATTING_DIR, scan_id=scan_id, step=3)
+        ]
+        if depth_ok:
+            train_cmd += ["-d", "depths",
+                          "--depth_l1_weight_final", str(DEPTH_L1_WEIGHT_FINAL)]
+        returncode, output = run_with_progress(
+            train_cmd, cwd=GAUSSIAN_SPLATTING_DIR, scan_id=scan_id, step=3)
         if returncode != 0:
             raise Exception(f"3DGS training failed: {output[-2000:]}")
         update_progress(scan_id, 3, 100)

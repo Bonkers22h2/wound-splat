@@ -32,7 +32,7 @@ class Scan(Base):
     error_message = Column(Text, nullable=True)
 
     # Progress tracking
-    current_step = Column(Integer, default=0)        # 0-7
+    current_step = Column(Float, default=0)          # 0-7 (2.5 = AI depth step)
     current_step_name = Column(String, nullable=True) # e.g. "Training 3DGS"
     progress_percent = Column(Float, default=0.0)     # 0-100, used within step 3 (training)
 
