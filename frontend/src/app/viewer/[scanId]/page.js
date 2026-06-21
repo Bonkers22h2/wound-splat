@@ -7,12 +7,24 @@ export default function ViewerPage() {
   const { scanId } = useParams()
   const mountRef = useRef(null)
   const pointsRef = useRef(null)
+  const cameraRef = useRef(null)
+  const controlsRef = useRef(null)
+  const pointsObjRef = useRef(null)
+  const meshRef = useRef(null)
+  const centerRef = useRef(null)
+  const scaleRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [measurements, setMeasurements] = useState(null)
+  const [depthMaps, setDepthMaps] = useState([])
+  const [depthIndex, setDepthIndex] = useState(0)
+  const [showDepth, setShowDepth] = useState(false)
+  const [smoothSurface, setSmoothSurface] = useState(false)
+  const [meshLoading, setMeshLoading] = useState(false)
 
   useEffect(() => {
     loadMeasurements()
+    loadDepthMaps()
     initViewer()
   }, [])
 
@@ -22,6 +34,68 @@ export default function ViewerPage() {
       const data = await res.json()
       setMeasurements(data)
     } catch {}
+  }
+
+  const loadDepthMaps = async () => {
+    try {
+      const res = await fetch(`/api/scans/${scanId}/depths`)
+      const data = await res.json()
+      setDepthMaps(data.depths || [])
+    } catch {}
+  }
+
+  // Lazily build the smooth mesh surface (Poisson, generated server-side) and
+  // add it to the same group as the points so rotation/scale stay in sync.
+  const loadMesh = async () => {
+    const group = pointsRef.current
+    if (!group) return
+    setMeshLoading(true)
+    const THREE = await import('three')
+    const { PLYLoader } = await import('three/examples/jsm/loaders/PLYLoader.js')
+    new PLYLoader().load(
+      `/api/scans/${scanId}/mesh`,
+      (geometry) => {
+        geometry.computeVertexNormals()
+        if (centerRef.current) {
+          const c = centerRef.current
+          geometry.translate(-c.x, -c.y, -c.z)
+        }
+        const hasColor = geometry.hasAttribute('color')
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+          vertexColors: hasColor,
+          color: hasColor ? 0xffffff : 0xcf8e7d,
+          roughness: 0.9, metalness: 0.0,
+          side: THREE.DoubleSide
+        }))
+        if (scaleRef.current) mesh.scale.setScalar(scaleRef.current)
+        meshRef.current = mesh
+        group.add(mesh)
+        if (pointsObjRef.current) pointsObjRef.current.visible = false
+        setMeshLoading(false)
+      },
+      undefined,
+      (err) => {
+        console.error('mesh load error:', err)
+        setMeshLoading(false)
+        setSmoothSurface(false)
+      }
+    )
+  }
+
+  const toggleSmooth = async () => {
+    const next = !smoothSurface
+    setSmoothSurface(next)
+    if (next) {
+      if (meshRef.current) {
+        meshRef.current.visible = true
+        if (pointsObjRef.current) pointsObjRef.current.visible = false
+      } else {
+        await loadMesh()
+      }
+    } else {
+      if (meshRef.current) meshRef.current.visible = false
+      if (pointsObjRef.current) pointsObjRef.current.visible = true
+    }
   }
 
   const rotateModel = (axis, degrees) => {
@@ -35,8 +109,15 @@ export default function ViewerPage() {
 
   const resetRotation = () => {
     const points = pointsRef.current
-    if (!points) return
-    points.rotation.set(0, 0, 0)
+    if (points) points.rotation.set(0, 0, 0)
+    // Also bring the camera back to the default framing of the wound
+    const camera = cameraRef.current
+    const controls = controlsRef.current
+    if (camera && controls) {
+      camera.position.set(0, 0, 22)
+      controls.target.set(0, 0, 0)
+      controls.update()
+    }
   }
 
   const initViewer = async () => {
@@ -66,6 +147,8 @@ export default function ViewerPage() {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
+    cameraRef.current = camera
+    controlsRef.current = controls
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6)
@@ -90,13 +173,13 @@ export default function ViewerPage() {
         let material
         if (geometry.hasAttribute('color')) {
           material = new THREE.PointsMaterial({
-            size: 0.15,
+            size: 0.25,
             vertexColors: true,
             sizeAttenuation: true
           })
         } else {
           material = new THREE.PointsMaterial({
-            size: 0.15,
+            size: 0.25,
             color: 0x1D9E75,
             sizeAttenuation: true
           })
@@ -104,27 +187,38 @@ export default function ViewerPage() {
 
         const points = new THREE.Points(geometry, material)
 
-        // Center the geometry
+        // Recenter the ACTUAL vertices on the origin (translate the geometry,
+        // not the object) so the wound sits exactly at the orbit pivot.
         geometry.computeBoundingBox()
         const box = geometry.boundingBox
         const center = new THREE.Vector3()
         box.getCenter(center)
-        points.position.sub(center)
+        geometry.translate(-center.x, -center.y, -center.z)
 
-        // Scale to fit view
+        // Normalize size so the wound fills the view regardless of scan scale.
+        // Scaling now happens around the origin, so the wound stays centered.
         const size = new THREE.Vector3()
         box.getSize(size)
-        const maxDim = Math.max(size.x, size.y, size.z)
-        const scale = 20 / maxDim
+        const maxDim = Math.max(size.x, size.y, size.z) || 1
+        const scale = 14 / maxDim
         points.scale.setScalar(scale)
 
-        // Wrap in a group so position offset + rotation don't conflict
+        // Wrap in a group so the orientation buttons rotate around the centre
         const group = new THREE.Group()
         group.add(points)
         scene.add(group)
         pointsRef.current = group
+        pointsObjRef.current = points
+        centerRef.current = center.clone()
+        scaleRef.current = scale
 
-        camera.position.set(0, 0, 25)
+        // Aim the camera AND the orbit pivot at the wound centre (origin),
+        // so dragging spins the wound in place instead of swinging it around.
+        controls.target.set(0, 0, 0)
+        controls.minDistance = 5
+        controls.maxDistance = 60
+        controls.rotateSpeed = 0.9
+        camera.position.set(0, 0, 22)
         controls.update()
         setLoading(false)
       },
@@ -242,6 +336,37 @@ export default function ViewerPage() {
               🖱️ Drag to rotate · Scroll to zoom · Right-click to pan
             </div>
           )}
+
+          {/* AI Depth map viewer */}
+          {!loading && !error && showDepth && depthMaps.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '16px', right: '16px', width: '320px',
+              background: 'rgba(0,0,0,0.82)', borderRadius: '10px', padding: '12px',
+              display: 'flex', flexDirection: 'column', gap: '8px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600 }}>AI DEPTH MAP</span>
+                <button style={{ ...rotateBtnStyle, padding: '2px 8px' }} onClick={() => setShowDepth(false)}>✕</button>
+              </div>
+              <img
+                src={`/api/scans/${scanId}/depth/${depthMaps[depthIndex]}`}
+                alt={`depth frame ${depthIndex + 1}`}
+                style={{ width: '100%', borderRadius: '6px', display: 'block', background: '#111' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button style={rotateBtnStyle} onClick={() => setDepthIndex(i => Math.max(0, i - 1))}>◀</button>
+                <input
+                  type="range" min={0} max={depthMaps.length - 1} value={depthIndex}
+                  onChange={e => setDepthIndex(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <button style={rotateBtnStyle} onClick={() => setDepthIndex(i => Math.min(depthMaps.length - 1, i + 1))}>▶</button>
+              </div>
+              <div style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af' }}>
+                Frame {depthIndex + 1} / {depthMaps.length} · <span style={{ color: '#ef4444' }}>near</span> → <span style={{ color: '#3b82f6' }}>far</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -293,6 +418,33 @@ export default function ViewerPage() {
                 </div>
               </div>
             </>
+          )}
+
+          <button
+            onClick={toggleSmooth}
+            disabled={meshLoading}
+            style={{
+              display: 'block', width: '100%', background: smoothSurface ? '#0F6E56' : 'white',
+              color: smoothSurface ? 'white' : '#0F6E56', padding: '10px', borderRadius: '8px',
+              textAlign: 'center', fontWeight: 600, fontSize: '14px', marginBottom: '8px',
+              border: '1px solid #0F6E56', cursor: meshLoading ? 'wait' : 'pointer', opacity: meshLoading ? 0.7 : 1
+            }}
+          >
+            {meshLoading ? 'Generating surface…' : (smoothSurface ? 'Show Points' : 'Smooth Surface')}
+          </button>
+
+          {depthMaps.length > 0 && (
+            <button
+              onClick={() => setShowDepth(s => !s)}
+              style={{
+                display: 'block', width: '100%', background: showDepth ? '#0F6E56' : 'white',
+                color: showDepth ? 'white' : '#0F6E56', padding: '10px', borderRadius: '8px',
+                textAlign: 'center', fontWeight: 600, fontSize: '14px', marginBottom: '8px',
+                border: '1px solid #0F6E56', cursor: 'pointer'
+              }}
+            >
+              {showDepth ? 'Hide' : 'Show'} AI Depth Maps ({depthMaps.length})
+            </button>
           )}
 
           <a
