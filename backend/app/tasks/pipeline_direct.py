@@ -6,11 +6,7 @@ import threading
 from app.database import SessionLocal
 from app.models.db import Scan, Measurement, ScanStatus
 from datetime import datetime
-
-GAUSSIAN_SPLATTING_DIR = os.getenv(
-    "GAUSSIAN_SPLATTING_DIR",
-    "C:/Users/bonkc/Documents/wound-splat/gaussian-splatting"
-)
+from app.paths import GAUSSIAN_SPLATTING_DIR
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

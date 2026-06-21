@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Scan, Patient, ScanStatus, Measurement
 from app.tasks.pipeline_direct import run_pipeline, GAUSSIAN_SPLATTING_DIR
+from app.paths import UPLOAD_DIR
 import uuid
 import os
 import shutil
@@ -12,7 +13,6 @@ import numpy as np
 
 router = APIRouter()
 
-UPLOAD_DIR = "data/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload/{patient_id}")
