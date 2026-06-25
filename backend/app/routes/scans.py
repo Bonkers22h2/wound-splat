@@ -125,6 +125,42 @@ def get_ply(scan_id: str, db: Session = Depends(get_db)):
     return FileResponse(ply_path, media_type="application/octet-stream",
                        filename=f"wound_{scan_id}.ply")
 
+@router.get("/{scan_id}/splat")
+def get_splat(scan_id: str, db: Session = Depends(get_db)):
+    """Serve the full 3DGS point_cloud.ply (with Gaussian fields intact) for the
+    real Gaussian-splat renderer. NOTE: unlike /ply this never falls back to
+    wound_only.ply, because that file is a plain Open3D point cloud (x/y/z + RGB
+    only) and has none of the opacity/scale/rotation/SH data a splat viewer needs.
+    """
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if not scan.output_path:
+        raise HTTPException(status_code=404, detail="No output available")
+
+    pc_dir = os.path.join(scan.output_path, "point_cloud")
+    if not os.path.isdir(pc_dir):
+        raise HTTPException(status_code=404, detail="point_cloud directory not found")
+
+    iter_folders = [d for d in os.listdir(pc_dir) if d.startswith("iteration_")]
+    if not iter_folders:
+        raise HTTPException(status_code=404, detail="No iteration folder found")
+
+    iter_folders.sort(key=lambda x: int(x.split("_")[1]), reverse=True)
+    latest = os.path.join(pc_dir, iter_folders[0])
+
+    # Prefer the noise-filtered splat (wound_splat.ply, produced by
+    # segment_splat.py); fall back to the raw full splat if it isn't there yet.
+    clean_ply = os.path.join(latest, "wound_splat.ply")
+    full_ply = os.path.join(latest, "point_cloud.ply")
+    splat_ply = clean_ply if os.path.exists(clean_ply) else full_ply
+
+    if not os.path.exists(splat_ply):
+        raise HTTPException(status_code=404, detail="Gaussian splat PLY not found")
+
+    return FileResponse(splat_ply, media_type="application/octet-stream",
+                       filename=f"splat_{scan_id}.ply")
+
 def _depths_dir(scan_id: str) -> str:
     return os.path.join(GAUSSIAN_SPLATTING_DIR, "data", f"scan_{scan_id}", "depths")
 

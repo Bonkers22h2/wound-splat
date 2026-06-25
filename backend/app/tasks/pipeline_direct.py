@@ -239,6 +239,18 @@ def _pipeline_task(scan_id: str):
             "--ply", ply_path,
             "--output", wound_only_path
         ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+
+        # Also produce a noise-filtered gaussian splat (wound_splat.ply) for the
+        # real splat viewer. Non-critical: the /splat endpoint falls back to the
+        # raw point_cloud.ply if this is missing, so don't fail the run over it.
+        try:
+            subprocess.run([
+                python, f"{GAUSSIAN_SPLATTING_DIR}/segment_splat.py",
+                "--ply", ply_path,
+                "--output", os.path.join(iter_dir, "wound_splat.ply")
+            ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+        except Exception as e:
+            print(f"[{scan_id}] Splat filtering failed (non-critical): {e}")
         update_progress(scan_id, 5, 100)
 
         # Step 6: Measure wound
