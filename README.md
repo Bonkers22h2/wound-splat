@@ -15,6 +15,8 @@ Smartphone video
       ↓
 COLMAP (Structure-from-Motion)
       ↓
+Depth Anything V2 (AI depth prior)
+      ↓
 3D Gaussian Splatting (3DGS)
       ↓
 Wound segmentation + measurement
@@ -90,6 +92,16 @@ cd ../frontend
 npm install
 ```
 
+### 6. Environment variables (optional)
+
+The backend resolves paths automatically relative to the project root. You can override them with environment variables if you keep any directory outside the repo:
+
+| Variable | Default | Description |
+|---|---|---|
+| `GAUSSIAN_SPLATTING_DIR` | `<repo>/gaussian-splatting` | Path to the gaussian-splatting directory |
+| `BACKEND_DATA_DIR` | `<repo>/backend/data` | Where scan output files are stored |
+| `SQLITE_DATABASE_PATH` | `<repo>/backend/woundsplat.db` | SQLite database file path |
+
 ---
 
 ## Running the System
@@ -121,19 +133,22 @@ Open the app at **http://localhost:3000**
 
 ## How It Works
 
-When a patient uploads a video, the backend automatically runs a 7-step pipeline in a background thread:
+When a patient uploads a video, the backend automatically runs an 8-step pipeline in a background thread:
 
 | Step | Tool | Description |
 |---|---|---|
 | 1 | ffmpeg | Extract frames from video |
 | 2 | COLMAP | Structure-from-Motion — compute camera poses + sparse point cloud |
-| 3 | 3D Gaussian Splatting | Train 3D model (7000 iterations) |
+| 2.5 | generate_depth.py | Generate AI monocular depth maps (Depth Anything V2) for depth regularization |
+| 3 | 3D Gaussian Splatting | Train 3D model (30,000 iterations) with depth prior if step 2.5 succeeded |
 | 4 | render.py | Generate rendered preview images |
 | 5 | wound_segment.py | Isolate wound tissue from point cloud |
 | 6 | wound_measure.py | Compute surface area, volume, max depth |
 | 7 | generate_report.py | Generate PDF assessment report |
 
-Processing time: ~10-30 minutes per scan depending on GPU and video length.
+Step 2.5 is non-critical — if depth generation fails, training continues without the depth prior.
+
+Processing time: ~30-60 minutes per scan depending on GPU and video length.
 
 ---
 
@@ -144,20 +159,22 @@ wound-splat/
 ├── backend/                  FastAPI app, database, pipeline
 │   ├── app/
 │   │   ├── models/db.py      SQLAlchemy models (Patient, Scan, Measurement)
+│   │   ├── paths.py          Configurable directory paths (env var overrides)
 │   │   ├── routes/           API endpoints
 │   │   └── tasks/
 │   │       └── pipeline_direct.py   Main pipeline runner
 │   ├── generate_report.py    PDF report generator (ReportLab)
-│   └── main.py                FastAPI entry point
+│   └── main.py               FastAPI entry point
 ├── frontend/                  Next.js app
 │   └── src/app/
 │       ├── patient/           Patient portal
 │       ├── admin/              Clinical admin dashboard
 │       └── viewer/[scanId]/    Interactive 3D point cloud viewer
 └── gaussian-splatting/        3DGS pipeline (graphdeco-inria) + custom scripts
+    ├── generate_depth.py       AI monocular depth map generation (Depth Anything V2)
     ├── wound_segment.py        Wound tissue segmentation
-    ├── wound_measure.py         Wound measurement (Open3D)
-    └── validate_accuracy.py     Accuracy validation against known objects
+    ├── wound_measure.py        Wound measurement (Open3D)
+    └── validate_accuracy.py    Accuracy validation against known objects
 ```
 
 ---
