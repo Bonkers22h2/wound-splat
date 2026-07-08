@@ -11,6 +11,7 @@ export default function ViewerPage() {
   const controlsRef = useRef(null)
   const pointsObjRef = useRef(null)
   const meshRef = useRef(null)
+  const splatRef = useRef(null)
   const centerRef = useRef(null)
   const scaleRef = useRef(null)
   const [loading, setLoading] = useState(true)
@@ -21,6 +22,8 @@ export default function ViewerPage() {
   const [showDepth, setShowDepth] = useState(false)
   const [smoothSurface, setSmoothSurface] = useState(false)
   const [meshLoading, setMeshLoading] = useState(false)
+  const [splatView, setSplatView] = useState(false)
+  const [splatLoading, setSplatLoading] = useState(false)
 
   useEffect(() => {
     loadMeasurements()
@@ -82,10 +85,82 @@ export default function ViewerPage() {
     )
   }
 
+  // Lazily build the real Gaussian-splat view. Unlike the points/mesh views
+  // (which use the cropped wound_only.ply via /ply), this loads the full 3DGS
+  // point_cloud.ply with its Gaussian fields intact from /splat, and renders it
+  // with @mkkellogg/gaussian-splats-3d. The DropInViewer is a THREE.Object3D, so
+  // it goes in the same rotation group and the orientation buttons still work.
+  const loadSplat = async () => {
+    const group = pointsRef.current
+    if (!group) return
+    setSplatLoading(true)
+    const THREE = await import('three')
+    const GS = await import('@mkkellogg/gaussian-splats-3d')
+    // sharedMemoryForWorkers:false avoids needing COOP/COEP cross-origin-isolation
+    // headers; gpuAcceleratedSort follows suit. ~82k splats sort fine on the CPU.
+    const dropIn = new GS.DropInViewer({
+      gpuAcceleratedSort: false,
+      sharedMemoryForWorkers: false,
+      sphericalHarmonicsDegree: 0,
+    })
+    try {
+      await dropIn.addSplatScene(`/api/scans/${scanId}/splat`, {
+        // Our endpoint URL ends in /splat (not .ply), so the library can't sniff
+        // the format from the extension — tell it explicitly this is a 3DGS .ply.
+        format: GS.SceneFormat.Ply,
+        splatAlphaRemovalThreshold: 5,
+        showLoadingUI: false,
+      })
+      // Center + normalize to the same 14-unit framing as the points view, using
+      // the splat's own bounding box (the full scene has different bounds than
+      // the cropped wound cloud).
+      const bbox = dropIn.splatMesh.computeBoundingBox(false)
+      const center = new THREE.Vector3(); bbox.getCenter(center)
+      const size = new THREE.Vector3(); bbox.getSize(size)
+      const maxDim = Math.max(size.x, size.y, size.z) || 1
+      const scale = 14 / maxDim
+      dropIn.scale.setScalar(scale)
+      dropIn.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
+      group.add(dropIn)
+      splatRef.current = dropIn
+      if (pointsObjRef.current) pointsObjRef.current.visible = false
+      if (meshRef.current) meshRef.current.visible = false
+      setSplatLoading(false)
+    } catch (err) {
+      console.error('splat load error:', err)
+      setSplatLoading(false)
+      setSplatView(false)
+    }
+  }
+
+  const toggleSplat = async () => {
+    const next = !splatView
+    setSplatView(next)
+    if (next) {
+      // Splat is mutually exclusive with the mesh view.
+      setSmoothSurface(false)
+      if (meshRef.current) meshRef.current.visible = false
+      if (splatRef.current) {
+        splatRef.current.visible = true
+        if (pointsObjRef.current) pointsObjRef.current.visible = false
+      } else {
+        await loadSplat()
+      }
+    } else {
+      if (splatRef.current) splatRef.current.visible = false
+      if (pointsObjRef.current) pointsObjRef.current.visible = true
+    }
+  }
+
   const toggleSmooth = async () => {
     const next = !smoothSurface
     setSmoothSurface(next)
     if (next) {
+      // Mesh is mutually exclusive with the splat view.
+      if (splatView) {
+        setSplatView(false)
+        if (splatRef.current) splatRef.current.visible = false
+      }
       if (meshRef.current) {
         meshRef.current.visible = true
         if (pointsObjRef.current) pointsObjRef.current.visible = false
@@ -419,6 +494,19 @@ export default function ViewerPage() {
               </div>
             </>
           )}
+
+          <button
+            onClick={toggleSplat}
+            disabled={splatLoading}
+            style={{
+              display: 'block', width: '100%', background: splatView ? '#0F6E56' : 'white',
+              color: splatView ? 'white' : '#0F6E56', padding: '10px', borderRadius: '8px',
+              textAlign: 'center', fontWeight: 600, fontSize: '14px', marginBottom: '8px',
+              border: '1px solid #0F6E56', cursor: splatLoading ? 'wait' : 'pointer', opacity: splatLoading ? 0.7 : 1
+            }}
+          >
+            {splatLoading ? 'Loading splats…' : (splatView ? 'Show Points' : 'Gaussian Splat View')}
+          </button>
 
           <button
             onClick={toggleSmooth}
