@@ -31,70 +31,162 @@ PDF report + interactive 3D viewer
 ## Requirements
 
 ### Hardware
-- NVIDIA GPU with **6GB+ VRAM** and CUDA support (tested on RTX 4050)
+- **NVIDIA GPU with 6GB+ VRAM** and CUDA support (tested on RTX 4050). An NVIDIA GPU is mandatory — the 3DGS training and CUDA extensions will not run on CPU or non-NVIDIA hardware.
+- ~2–3 GB free disk per scan (point clouds, renders, depth maps).
 
-### Software
-- **Python 3.11** (newer versions are incompatible with PyTorch/Open3D wheels used here)
-- **Node.js** 18+
-- **CUDA Toolkit 12.6**
-- **COLMAP 3.x/4.x** (added to system PATH)
-- **Visual Studio 2022 Build Tools** (C++ workload, for compiling CUDA extensions)
-- **ffmpeg** (added to system PATH)
+### Software (Windows 10/11)
+| Component | Version | Notes |
+|---|---|---|
+| **Python** | **3.11.x** | 3.12+ is **not** supported — the pinned PyTorch/Open3D wheels have no 3.12 builds. |
+| **Node.js** | 18+ (20 LTS recommended) | Includes `npm`. |
+| **NVIDIA driver** | Latest for your GPU | Must support CUDA 12.6. |
+| **CUDA Toolkit** | **12.6** | Must match the `+cu126` PyTorch wheels below. |
+| **Visual Studio 2022 Build Tools** | C++ workload | Needed to compile the 3DGS CUDA extensions (see below). |
+| **COLMAP** | 3.x / 4.x | Added to system `PATH`. |
+| **ffmpeg** | any recent | Added to system `PATH`. |
+| **Git** | any | To clone the repo. |
 
 ---
 
-## Setup
+## Prerequisite Installation (fresh machine)
+
+Do these **before** the project setup. Order matters: Build Tools and CUDA must be in place before compiling the CUDA extensions.
+
+### 1. Python 3.11
+Download **Python 3.11.x (64-bit)** from <https://www.python.org/downloads/release/python-3119/>.
+During install, check **"Add python.exe to PATH."**
+Verify:
+```powershell
+python --version   # should print 3.11.x
+```
+
+### 2. Node.js 18+
+Download the **LTS** installer from <https://nodejs.org/> and install with defaults.
+Verify:
+```powershell
+node --version
+npm --version
+```
+
+### 3. Visual Studio 2022 Build Tools (C++ compiler)
+The `diff-gaussian-rasterization` and `simple-knn` CUDA extensions are compiled from source with MSVC — you need the C++ toolchain.
+
+1. Download **Build Tools for Visual Studio 2022** from
+   <https://visualstudio.microsoft.com/downloads/> → *Tools for Visual Studio* → **Build Tools for Visual Studio 2022**.
+2. In the installer, select the **"Desktop development with C++"** workload. Ensure these are ticked:
+   - **MSVC v143 – VS 2022 C++ x64/x86 build tools**
+   - **Windows 11 SDK** (or Windows 10 SDK)
+   - **C++ CMake tools for Windows**
+3. Install. This provides `cl.exe` and `vcvars64.bat` used later.
+
+> If you already have Visual Studio 2022 (Community/Pro) with the C++ workload, that works too — you don't need the separate Build Tools.
+
+### 4. CUDA Toolkit 12.6
+Download **CUDA Toolkit 12.6** from
+<https://developer.nvidia.com/cuda-12-6-0-download-archive> and install (Express is fine).
+Verify:
+```powershell
+nvcc --version    # should report release 12.6
+nvidia-smi        # should list your GPU and a driver supporting CUDA 12.6+
+```
+
+### 5. COLMAP (added to PATH)
+1. Download the **CUDA build** of COLMAP from <https://github.com/colmap/colmap/releases> (e.g. `colmap-x64-windows-cuda.zip`).
+2. Extract to a permanent folder, e.g. `C:\tools\colmap`.
+3. Add that folder to your **PATH** (System Properties → Environment Variables → Path → New).
+Verify in a **new** terminal:
+```powershell
+colmap --help
+```
+
+### 6. ffmpeg (added to PATH)
+1. Download a Windows build from <https://www.gyan.dev/ffmpeg/builds/> (e.g. `ffmpeg-release-essentials.zip`).
+2. Extract and add its `bin\` folder to **PATH**.
+Verify in a **new** terminal:
+```powershell
+ffmpeg -version
+```
+
+---
+
+## Project Setup
 
 ### 1. Clone the repository
-
-```bash
+```powershell
 git clone https://github.com/Bonkers22h2/wound-splat.git
 cd wound-splat
 ```
 
-### 2. Backend setup
-
-```bash
+### 2. Create the backend virtual environment
+```powershell
 cd backend
 python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+.\venv\Scripts\Activate.ps1     # PowerShell  (use venv\Scripts\activate.bat in cmd.exe)
+python -m pip install --upgrade pip
 ```
 
-### 3. Compile 3DGS CUDA extensions
+### 3. Install PyTorch (CUDA 12.6 build) — do this FIRST
+`requirements.txt` pins the CUDA wheels `torch==2.12.0+cu126` (and matching `torchvision`/`torchaudio`). These are **not** on the default PyPI index, so install them from the PyTorch CUDA index before anything else:
 
-Open a Developer Command Prompt for VS 2022 (or run `vcvars64.bat`) before this step:
+```powershell
+pip install torch==2.12.0+cu126 torchvision==0.27.0+cu126 torchaudio==2.11.0+cu126 `
+  --index-url https://download.pytorch.org/whl/cu126
+```
 
-```bash
+Verify CUDA is visible to PyTorch:
+```powershell
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# expect: 2.12.0+cu126 True
+```
+
+### 4. Install the remaining Python dependencies
+```powershell
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126
+```
+> The `--extra-index-url` flag lets pip re-resolve the pinned `+cu126` torch lines without error. This step also installs **Depth Anything V2** support (`transformers` + `huggingface_hub`), which powers pipeline step 2.5 and the **"Show AI Depth Maps"** viewer button.
+>
+> **Note:** `requirements.txt` references `diff-gaussian-rasterization` and `simple-knn` via **relative paths** (`../gaussian-splatting/submodules/...`), so it is portable — but that means you must run `pip install -r requirements.txt` **from the `backend/` directory** for them to resolve. These are the CUDA extensions; because they build with MSVC, pip may fail to compile them at this step (the build environment is loaded in Step 5). If so, that's expected — let Step 5 build them. To install only the Python deps here and defer the extensions, you can temporarily comment out those two lines and rely on Step 5.
+
+### 5. Compile the 3DGS CUDA extensions
+These must be built with the MSVC + CUDA toolchain. Open a **"x64 Native Tools Command Prompt for VS 2022"**, or initialize the environment manually, then activate the venv and build:
+
+```powershell
+# Load the MSVC build environment (adjust path if you installed full VS instead of Build Tools):
 "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 
-cd ../gaussian-splatting/submodules/diff-gaussian-rasterization
+cd C:\Users\<you>\Documents\wound-splat\backend
+.\venv\Scripts\Activate.ps1
 set DISTUTILS_USE_SDK=1
+
+cd ..\gaussian-splatting\submodules\diff-gaussian-rasterization
 pip install --no-build-isolation .
 
-cd ../simple-knn
+cd ..\simple-knn
 pip install --no-build-isolation .
 ```
 
-> Note: `gaussian-splatting/SIBR_viewers/`, `submodules/diff-gaussian-rasterization/third_party/`, and `submodules/fused-ssim/` are excluded from this repo (large vendor code). Clone them from the official [graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repo if needed — they are not required for the core pipeline.
+Verify both imported cleanly:
+```powershell
+python -c "import diff_gaussian_rasterization, simple_knn; print('CUDA extensions OK')"
+```
 
-### 4. Initialize the database
+> **Note:** `gaussian-splatting/SIBR_viewers/`, `submodules/diff-gaussian-rasterization/third_party/`, and `submodules/fused-ssim/` are excluded from this repo (large vendor code). Clone them from the official [graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repo only if you need the desktop SIBR viewer — they are **not** required for the core pipeline.
 
-```bash
-cd ../../backend
+### 6. Initialize the database
+```powershell
+cd ..\..\backend
 python init_db.py
 ```
+This creates the SQLite database (`woundsplat.db` by default).
 
-### 5. Frontend setup
-
-```bash
-cd ../frontend
+### 7. Frontend setup
+```powershell
+cd ..\frontend
 npm install
 ```
 
-### 6. Environment variables (optional)
-
-The backend resolves paths automatically relative to the project root. You can override them with environment variables if you keep any directory outside the repo:
+### 8. Environment variables (optional)
+The backend resolves all paths automatically relative to the project root. Override only if you keep a directory outside the repo:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -106,20 +198,19 @@ The backend resolves paths automatically relative to the project root. You can o
 
 ## Running the System
 
-Two terminals are required.
+Two terminals are required. The frontend proxies all `/api/*` requests to the backend on port **8000** (configured in `frontend/next.config.ts`), so both must be running.
 
-**Terminal 1 — Backend (FastAPI)**
-
-```bash
+**Terminal 1 — Backend (FastAPI, port 8000)**
+```powershell
+# Load the MSVC environment so the CUDA extensions can be imported at runtime:
 "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 cd backend
-venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 uvicorn main:app --reload --port 8000
 ```
 
-**Terminal 2 — Frontend (Next.js)**
-
-```bash
+**Terminal 2 — Frontend (Next.js, port 3000)**
+```powershell
 cd frontend
 npm run dev
 ```
@@ -146,9 +237,9 @@ When a patient uploads a video, the backend automatically runs an 8-step pipelin
 | 6 | wound_measure.py | Compute surface area, volume, max depth |
 | 7 | generate_report.py | Generate PDF assessment report |
 
-Step 2.5 is non-critical — if depth generation fails, training continues without the depth prior.
+Step 2.5 is non-critical — if depth generation fails (e.g. `transformers` not installed), training continues without the depth prior and the **"Show AI Depth Maps"** button will not appear for that scan.
 
-Processing time: ~30-60 minutes per scan depending on GPU and video length.
+Processing time: ~30–60 minutes per scan depending on GPU and video length. On the first scan after setup, Depth Anything V2 downloads its model weights from HuggingFace (~400 MB, cached afterward).
 
 ---
 
@@ -164,8 +255,11 @@ wound-splat/
 │   │   └── tasks/
 │   │       └── pipeline_direct.py   Main pipeline runner
 │   ├── generate_report.py    PDF report generator (ReportLab)
+│   ├── init_db.py            Database initializer
+│   ├── requirements.txt      Python dependencies (incl. Depth Anything V2)
 │   └── main.py               FastAPI entry point
 ├── frontend/                  Next.js app
+│   ├── next.config.ts         Dev proxy: /api/* → http://localhost:8000
 │   └── src/app/
 │       ├── patient/           Patient portal
 │       ├── admin/              Clinical admin dashboard
@@ -176,6 +270,19 @@ wound-splat/
     ├── wound_measure.py        Wound measurement (Open3D)
     └── validate_accuracy.py    Accuracy validation against known objects
 ```
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause / Fix |
+|---|---|
+| `torch.cuda.is_available()` is `False` | Wrong torch build or driver. Reinstall torch from the `cu126` index (Step 3) and update your NVIDIA driver. |
+| `pip install -r requirements.txt` fails on `torch==2.12.0+cu126` | You skipped Step 3 / the `--extra-index-url` flag. Add `--extra-index-url https://download.pytorch.org/whl/cu126`. |
+| Compiling extensions fails with `cl.exe not found` | The MSVC environment isn't loaded. Run `vcvars64.bat` (or use the *x64 Native Tools Command Prompt*) before `pip install --no-build-isolation .`. |
+| `colmap` / `ffmpeg` "not recognized" | Not on PATH. Add their folders to PATH and open a **new** terminal. |
+| No **"Show AI Depth Maps"** button in the viewer | Depth step 2.5 failed for that scan (usually `transformers` missing). Ensure `transformers` is installed (`pip show transformers`), then reprocess the scan. |
+| Frontend loads but data/3D model never appears | Backend not running on port 8000, or started without the MSVC env. Check Terminal 1 for CUDA-extension import errors. |
 
 ---
 

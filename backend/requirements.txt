@@ -13,7 +13,7 @@ celery==5.6.3
 certifi==2026.5.20
 cffi==2.0.0
 charset-normalizer==3.4.7
-click==8.4.1
+click==8.4.2
 click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
@@ -23,7 +23,9 @@ ConfigArgParse==1.7.5
 cssselect2==0.9.0
 dash==4.2.0
 decorator==5.3.1
-diff-gaussian-rasterization @ file:///C:/Users/bonkc/Documents/wound-splat/gaussian-splatting/submodules/diff-gaussian-rasterization
+# Local CUDA extension — relative path (run pip from the backend/ directory).
+# Built with the MSVC toolchain; see README "Compile the 3DGS CUDA extensions".
+../gaussian-splatting/submodules/diff-gaussian-rasterization
 ecdsa==0.19.2
 executing==2.2.1
 fastapi==0.136.3
@@ -90,7 +92,8 @@ retrying==1.4.2
 rpds-py==2026.5.1
 rsa==4.9.1
 scipy==1.17.1
-simple-knn @ file:///C:/Users/bonkc/Documents/wound-splat/gaussian-splatting/submodules/simple-knn
+# Local CUDA extension — relative path (run pip from the backend/ directory).
+../gaussian-splatting/submodules/simple-knn
 six==1.17.0
 SQLAlchemy==2.0.50
 stack-data==0.6.3
@@ -117,3 +120,21 @@ Werkzeug==3.1.8
 widgetsnbextension==4.0.15
 zipp==4.1.0
 zopfli==0.4.3
+
+# --- Depth Anything V2 (pipeline step 2.5: AI monocular depth prior) ---
+# Installing `transformers` pulls in the rest of this block automatically.
+# Required for generate_depth.py and the "Show AI Depth Maps" viewer button.
+transformers==5.13.0
+huggingface_hub==1.22.0
+tokenizers==0.22.2
+safetensors==0.8.0
+regex==2026.6.28
+hf-xet==1.5.1
+PyYAML==6.0.3
+httpx==0.28.1
+httpcore==1.0.9
+typer==0.26.8
+rich==15.0.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+shellingham==1.5.4
