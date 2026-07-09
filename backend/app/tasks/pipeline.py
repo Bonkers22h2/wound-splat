@@ -1,12 +1,21 @@
+"""Celery variant of the wound pipeline (requires a Redis broker + worker).
+
+The API currently uses the thread-based pipeline in pipeline_direct.py; this
+task is kept for deployments that run a dedicated Celery worker.
+"""
 import subprocess
 import sys
-from celery_worker import celery_app
-from app.database import SessionLocal
-from app.models.db import Scan, Measurement, ScanStatus
-from app.paths import BACKEND_DIR, GAUSSIAN_SPLATTING_DIR
 from datetime import datetime
 
+from celery_worker import celery_app
+from app.database import SessionLocal
+from app.models.db import Measurement, Scan, ScanStatus
+from app.paths import GAUSSIAN_SPLATTING_DIR
+from app.services.measurements import parse_measurements
+from app.services.report_service import generate_scan_report
+
 TRAIN_ITERATIONS = 7000
+
 
 @celery_app.task(bind=True)
 def process_wound_video(self, scan_id: str):
@@ -18,7 +27,6 @@ def process_wound_video(self, scan_id: str):
 
         patient = scan.patient
 
-        # Update status to processing
         scan.status = ScanStatus.PROCESSING
         db.commit()
 
@@ -72,8 +80,9 @@ def process_wound_video(self, scan_id: str):
 
         # Step 5: Segment wound
         print(f"[{scan_id}] Step 5: Segmenting wound...")
-        ply_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "point_cloud.ply"
-        wound_only_path = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}" / "wound_only.ply"
+        iteration_dir = output_dir / "point_cloud" / f"iteration_{TRAIN_ITERATIONS}"
+        ply_path = iteration_dir / "point_cloud.ply"
+        wound_only_path = iteration_dir / "wound_only.ply"
 
         subprocess.run([
             python, str(GAUSSIAN_SPLATTING_DIR / "wound_segment.py"),
@@ -90,26 +99,19 @@ def process_wound_video(self, scan_id: str):
 
         measurements = parse_measurements(result.stdout)
 
-        # Step 7: Generate PDF report
+        # Step 7: Generate PDF report (non-critical on failure)
         print(f"[{scan_id}] Step 7: Generating report...")
-        try:
-            sys.path.insert(0, str(BACKEND_DIR))
-            from generate_report import generate_report
-            generate_report(
-                scan_id=scan_id,
-                patient_name=patient.name,
-                patient_code=patient.patient_code,
-                video_filename=scan.video_filename,
-                output_dir=str(output_dir),
-                measurements={
-                    **measurements,
-                    "point_count": "N/A"
-                },
-                render_iteration=TRAIN_ITERATIONS
-            )
+        report_ok = generate_scan_report(
+            scan_id=scan_id,
+            patient_name=patient.name,
+            patient_code=patient.patient_code,
+            video_filename=scan.video_filename,
+            output_dir=str(output_dir),
+            measurements={**measurements, "point_count": "N/A"},
+            render_iteration=TRAIN_ITERATIONS
+        )
+        if report_ok:
             print(f"[{scan_id}] Report generated successfully.")
-        except Exception as e:
-            print(f"[{scan_id}] Report generation failed (non-critical): {e}")
 
         # Save measurements to database
         measurement = Measurement(
@@ -122,7 +124,6 @@ def process_wound_video(self, scan_id: str):
         )
         db.add(measurement)
 
-        # Update scan status
         scan.status = ScanStatus.RENDERED
         scan.output_path = str(output_dir)
         scan.completed_at = datetime.utcnow()
@@ -141,28 +142,3 @@ def process_wound_video(self, scan_id: str):
         return {"status": "failed", "error": str(e)}
     finally:
         db.close()
-
-def parse_measurements(output: str) -> dict:
-    measurements = {}
-    for line in output.split('\n'):
-        if 'Surface Area' in line and ':' in line:
-            try:
-                measurements['surface_area_cm2'] = float(line.split(':')[1].strip().split()[0])
-            except: pass
-        elif 'Volume' in line and ':' in line:
-            try:
-                measurements['volume_cm3'] = float(line.split(':')[1].strip().split()[0])
-            except: pass
-        elif 'Max Depth' in line and ':' in line:
-            try:
-                measurements['max_depth_mm'] = float(line.split(':')[1].strip().split()[0])
-            except: pass
-        elif 'Width' in line and ':' in line:
-            try:
-                measurements['width_cm'] = float(line.split(':')[1].strip().split()[0])
-            except: pass
-        elif 'Height' in line and ':' in line:
-            try:
-                measurements['height_cm'] = float(line.split(':')[1].strip().split()[0])
-            except: pass
-    return measurements

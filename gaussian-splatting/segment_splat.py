@@ -29,8 +29,8 @@ from plyfile import PlyData, PlyElement
 
 
 def filter_splat(ply_path, output_path=None,
-                 opacity_thresh=0.15, scale_percentile=98.0,
-                 crop_percentile=98.0):
+                 opacity_thresh=0.05, scale_percentile=99.5,
+                 crop_percentile=99.5):
     print("\n=== Wound-Splat Gaussian Filter ===")
     print(f"Loading: {ply_path}")
 
@@ -110,11 +110,11 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser("Wound-Splat Gaussian Filter")
     p.add_argument("--ply", required=True, help="Path to the full point_cloud.ply")
     p.add_argument("--output", default=None, help="Output .ply (default: wound_splat.ply beside input)")
-    p.add_argument("--opacity_thresh", default=0.15, type=float,
+    p.add_argument("--opacity_thresh", default=0.05, type=float,
                    help="Drop gaussians fainter than this (0-1). Higher = more aggressive.")
-    p.add_argument("--scale_percentile", default=98.0, type=float,
+    p.add_argument("--scale_percentile", default=99.5, type=float,
                    help="Drop gaussians larger than this percentile of max-axis scale. 0 to disable.")
-    p.add_argument("--crop_percentile", default=98.0, type=float,
+    p.add_argument("--crop_percentile", default=99.5, type=float,
                    help="Keep gaussians within this distance percentile of the wound centre. 0 to disable.")
     args = p.parse_args()
     filter_splat(args.ply, args.output,
