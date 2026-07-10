@@ -41,6 +41,11 @@ class Scan(Base):
     frames_registered = Column(Integer, nullable=True)  # frames COLMAP successfully registered
     registration_rate = Column(Float, nullable=True)    # frames_registered / frames_extracted * 100
 
+    # Absolute-scale calibration from a known-size reference in the video
+    # (e.g. "card", "coin:us_quarter"; see services/scale_calibration.py).
+    reference_object = Column(String, nullable=True)    # what the patient placed next to the wound
+    scale_cm_per_unit = Column(Float, nullable=True)    # measured scale; None = uncalibrated
+
     patient = relationship("Patient", back_populates="scans")
     measurements = relationship("Measurement", back_populates="scan", uselist=False)
 

@@ -21,6 +21,28 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.on_event("startup")
+def add_missing_columns():
+    """Idempotent mini-migration: tables are created once by init_db.py, and
+    create_all never alters existing ones, so columns added to the models
+    since then are bolted on here (SQLite only, which is the default setup)."""
+    from sqlalchemy import text
+    from app.database import engine
+
+    if engine.dialect.name != "sqlite":
+        return
+    new_columns = {
+        "reference_object": "VARCHAR",
+        "scale_cm_per_unit": "FLOAT",
+    }
+    with engine.begin() as conn:
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(scans)"))}
+        for name, ddl_type in new_columns.items():
+            if existing and name not in existing:
+                conn.execute(text(f"ALTER TABLE scans ADD COLUMN {name} {ddl_type}"))
+                print(f"Added scans.{name} column")
+
+
+@app.on_event("startup")
 def fail_interrupted_scans():
     """Pipeline runs in a daemon thread that dies when the server stops or
     reloads, leaving scans stuck at QUEUED/PROCESSING. On boot, mark any such

@@ -29,9 +29,12 @@ export const scanApi = {
   measurements: (scanId) => getJson(`/scans/${scanId}/measurements`),
   depthMaps: (scanId) => getJson(`/scans/${scanId}/depths`),
 
-  upload: async (patientId, file) => {
+  // referenceObject: known-size object in the video used for absolute-scale
+  // calibration (e.g. 'card', 'coin:us_quarter'); omit/null when none.
+  upload: async (patientId, file, referenceObject) => {
     const formData = new FormData()
     formData.append('file', file)
+    if (referenceObject) formData.append('reference_object', referenceObject)
     const res = await fetch(`${BACKEND_DIRECT_URL}/scans/upload/${patientId}`, {
       method: 'POST',
       body: formData,

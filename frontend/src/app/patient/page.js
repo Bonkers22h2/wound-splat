@@ -4,6 +4,23 @@ import Navbar from '../components/Navbar'
 import { patientApi, scanApi } from '@/lib/api'
 import { STATUS_STYLE } from '@/lib/theme'
 
+// Known-size objects the backend can detect for absolute-scale calibration.
+// Values must match REFERENCE_CHOICES in backend/app/services/scale_calibration.py.
+const REFERENCE_OPTIONS = [
+  { value: '', label: 'No reference (sizes will be approximate)' },
+  { value: 'card', label: 'Bank/ID card (recommended)' },
+  { value: 'coin:us_quarter', label: 'Coin – US quarter' },
+  { value: 'coin:us_nickel', label: 'Coin – US nickel' },
+  { value: 'coin:us_penny', label: 'Coin – US penny' },
+  { value: 'coin:us_dime', label: 'Coin – US dime' },
+  { value: 'coin:eur_1', label: 'Coin – 1 euro' },
+  { value: 'coin:eur_2', label: 'Coin – 2 euro' },
+  { value: 'coin:gbp_1', label: 'Coin – UK £1' },
+  { value: 'coin:php_1', label: 'Coin – ₱1 peso' },
+  { value: 'coin:php_5', label: 'Coin – ₱5 peso' },
+  { value: 'coin:php_10', label: 'Coin – ₱10 peso' },
+]
+
 export default function PatientPage() {
   const [patientId, setPatientId] = useState('')
   const [patientCode, setPatientCode] = useState('')
@@ -12,6 +29,7 @@ export default function PatientPage() {
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [step, setStep] = useState('login') // login | portal
+  const [referenceObject, setReferenceObject] = useState('card')
   const fileRef = useRef()
 
   const handleLogin = async () => {
@@ -44,7 +62,7 @@ export default function PatientPage() {
     setUploading(true)
     setMessage('')
     try {
-      const data = await scanApi.upload(patientId, file)
+      const data = await scanApi.upload(patientId, file, referenceObject)
       if (data.scan_id) {
         setMessage('Video uploaded successfully. Processing will begin shortly.')
         loadScans(patientId)
@@ -102,8 +120,27 @@ export default function PatientPage() {
         <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #e5e7eb', marginBottom: '2rem' }}>
           <h2 style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Upload Smartphone Video</h2>
           <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '1.5rem' }}>
-            Capture a steady 360-degree sweep around the wound. No depth sensor required.
+            Capture a steady 360-degree sweep around the wound. Include 1–2 cm of healthy
+            skin around the wound, and lay a bank card or coin flat on the skin next to it
+            so measurements come out in real centimeters.
           </p>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '0.4rem' }}>
+              Size reference placed next to the wound
+            </label>
+            <select
+              value={referenceObject}
+              onChange={e => setReferenceObject(e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: '8px',
+                border: '1px solid #d1d5db', fontSize: '14px', background: 'white'
+              }}
+            >
+              {REFERENCE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
           <div
             onClick={() => fileRef.current.click()}
             style={{

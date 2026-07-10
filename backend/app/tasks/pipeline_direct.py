@@ -18,6 +18,7 @@ from app.database import SessionLocal
 from app.models.db import Measurement, Scan, ScanStatus
 from app.paths import GAUSSIAN_SPLATTING_DIR
 from app.services.measurements import parse_measurements
+from app.services.scale_calibration import estimate_scan_scale
 from app.services.report_service import generate_scan_report
 from app.services.scan_outputs import count_images, find_latest_iteration_dir
 
@@ -171,7 +172,14 @@ def _pipeline_task(scan_id: str) -> None:
         update_progress(scan_id, 5, 100)
 
         update_progress(scan_id, 6, 0)
-        measurements = _measure_wound(wound_only_path)
+        scale = None
+        if scan.reference_object:
+            scale = estimate_scan_scale(data_dir, scan.reference_object)
+            scan.scale_cm_per_unit = scale
+            db.commit()
+            state = f"{scale:.5f} cm/unit" if scale else "not found - uncalibrated"
+            print(f"[{scan_id}] Scale calibration ({scan.reference_object}): {state}")
+        measurements = _measure_wound(wound_only_path, scale)
         update_progress(scan_id, 6, 100)
 
         update_progress(scan_id, 7, 0)
@@ -340,12 +348,20 @@ def _segment_wound(scan_id: str, output_dir: str) -> str:
     return wound_only_path
 
 
-def _measure_wound(wound_only_path: str) -> dict:
-    """Step 6: measure the cropped wound cloud and parse the printed values."""
-    result = subprocess.run([
+def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
+    """Step 6: measure the cropped wound cloud and parse the printed values.
+
+    scale (cm per cloud unit) comes from reference-object calibration; when
+    None the measurer runs with its legacy 1-unit-=-1-cm assumption.
+    """
+    cmd = [
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
         "--ply", wound_only_path,
-    ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+    ]
+    if scale is not None:
+        cmd += ["--scale", str(scale)]
+    result = subprocess.run(cmd, capture_output=True, text=True,
+                            cwd=GAUSSIAN_SPLATTING_DIR)
     return parse_measurements(result.stdout)
 
 

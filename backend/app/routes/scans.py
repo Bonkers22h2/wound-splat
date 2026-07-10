@@ -3,7 +3,7 @@ import os
 import shutil
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.services.depth_maps import (
     colorize_depth_map,
 )
 from app.services.mesh_builder import InsufficientPointsError, build_wound_mesh
+from app.services.scale_calibration import REFERENCE_CHOICES
 from app.services.scan_outputs import find_latest_iteration_dir, scan_depths_dir
 from app.tasks.pipeline_direct import run_pipeline
 
@@ -71,11 +72,14 @@ def _scan_detail(scan: Scan) -> dict:
 async def upload_scan(
     patient_id: str,
     file: UploadFile = File(...),
+    reference_object: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    if reference_object and reference_object not in REFERENCE_CHOICES:
+        raise HTTPException(status_code=422, detail="Unknown reference object")
 
     scan_id = str(uuid.uuid4())
     file_path = os.path.join(UPLOAD_DIR, f"{scan_id}_{file.filename}")
@@ -88,6 +92,7 @@ async def upload_scan(
         video_filename=file.filename,
         video_path=os.path.abspath(file_path),
         status=ScanStatus.QUEUED,
+        reference_object=reference_object or None,
     )
     db.add(scan)
     db.commit()
@@ -124,6 +129,9 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
         "registration_rate": scan.registration_rate,
         "frames_extracted": scan.frames_extracted,
         "frames_registered": scan.frames_registered,
+        "reference_object": scan.reference_object,
+        "scale_cm_per_unit": scan.scale_cm_per_unit,
+        "scale_calibrated": scan.scale_cm_per_unit is not None,
     }
 
 
