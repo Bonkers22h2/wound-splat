@@ -1,13 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
-
-const STATUS_STYLE = {
-  queued:     { color: '#92400e', background: '#fef3c7' },
-  processing: { color: '#1e40af', background: '#dbeafe' },
-  rendered:   { color: '#065f46', background: '#d1fae5' },
-  failed:     { color: '#991b1b', background: '#fee2e2' },
-}
+import { patientApi, scanApi } from '@/lib/api'
+import { STATUS_STYLE } from '@/lib/theme'
 
 export default function AdminPage() {
   const [queue, setQueue] = useState([])
@@ -18,28 +13,20 @@ export default function AdminPage() {
 
   const loadQueue = async () => {
     try {
-      const res = await fetch('/api/scans/admin/queue')
-      const data = await res.json()
-      setQueue(data)
+      setQueue(await scanApi.adminQueue())
     } catch {}
   }
 
   const loadPatients = async () => {
     try {
-      const res = await fetch('/api/patients/')
-      const data = await res.json()
-      setPatients(data)
+      setPatients(await patientApi.list())
     } catch {}
   }
 
   const createPatient = async () => {
     if (!newPatient.name || !newPatient.patient_code) return
     try {
-      const res = await fetch('/api/patients/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPatient)
-      })
+      const res = await patientApi.create(newPatient)
       if (res.ok) {
         setMessage(`Patient ${newPatient.patient_code} created successfully.`)
         setNewPatient({ name: '', patient_code: '' })

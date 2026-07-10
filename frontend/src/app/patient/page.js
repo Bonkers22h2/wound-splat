@@ -1,13 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Navbar from '../components/Navbar'
-
-const STATUS_STYLE = {
-  queued: { color: '#92400e', background: '#fef3c7' },
-  processing: { color: '#1e40af', background: '#dbeafe' },
-  rendered: { color: '#065f46', background: '#d1fae5' },
-  failed: { color: '#991b1b', background: '#fee2e2' },
-}
+import { patientApi, scanApi } from '@/lib/api'
+import { STATUS_STYLE } from '@/lib/theme'
 
 export default function PatientPage() {
   const [patientId, setPatientId] = useState('')
@@ -22,8 +17,7 @@ export default function PatientPage() {
   const handleLogin = async () => {
     if (!patientCode) return
     try {
-      const res = await fetch(`/api/patients/`)
-      const patients = await res.json()
+      const patients = await patientApi.list()
       const found = patients.find(p => p.patient_code === patientCode)
       if (found) {
         setPatientId(found.id)
@@ -40,9 +34,7 @@ export default function PatientPage() {
 
   const loadScans = async (pid) => {
     try {
-      const res = await fetch(`/api/scans/patient/${pid}`)
-      const data = await res.json()
-      setScans(data)
+      setScans(await scanApi.listForPatient(pid))
     } catch { }
   }
 
@@ -51,14 +43,8 @@ export default function PatientPage() {
     if (!file) return
     setUploading(true)
     setMessage('')
-    const formData = new FormData()
-    formData.append('file', file)
     try {
-      const res = await fetch(`http://localhost:8000/scans/upload/${patientId}`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
+      const data = await scanApi.upload(patientId, file)
       if (data.scan_id) {
         setMessage('Video uploaded successfully. Processing will begin shortly.')
         loadScans(patientId)
