@@ -59,10 +59,17 @@ KNOWN_REFERENCES = {
 # mapped back to original pixels).
 DETECT_MAX_DIM = 1280
 
-# Card candidate gates: fraction of image area and minAreaRect aspect ratio
-# around the ISO ID-1 ratio 85.60/53.98 = 1.586.
-CARD_AREA_FRAC = (0.01, 0.40)
-CARD_ASPECT = (1.30, 1.90)
+# Card candidate gates. Aspect brackets the ISO ID-1 ratio 85.60/53.98 = 1.586
+# with headroom for the foreshortening of oblique views. Rectangularity
+# (contour area / bounding-rect area) and solidity (contour area / hull area)
+# are what actually identify a card: it fills its rectangle and is convex,
+# whereas rounded-corner blobs and busy-background clutter do not - this
+# replaces the brittle "exactly 4 convex corners" rule that missed the card
+# in most frames (rounded corners + internal print + textured backgrounds).
+CARD_AREA_FRAC = (0.006, 0.45)
+CARD_ASPECT = (1.20, 2.20)
+CARD_MIN_RECTANGULARITY = 0.78
+CARD_MIN_SOLIDITY = 0.90
 
 # Coin candidate gates: fraction of image area, minor/major axis ratio
 # (rejects slivers; a coin at reasonable tilt stays fairly round), and a cap
@@ -93,33 +100,57 @@ INLIER_BAND = 0.20
 SPREAD_WARN = 0.08
 SPREAD_REJECT = 0.15
 
-MAX_FRAMES = 20
+# Frames sampled for detection. The reference appears in only a fraction of an
+# orbit's frames (blur, occlusion, grazing angles), so sample generously -
+# detection is cheap and more candidates mean a firmer consensus.
+MAX_FRAMES = 60
+
+
+def _card_masks(gray: np.ndarray):
+    """Otsu foreground/background split, both polarities. Whichever side the
+    card falls on, one polarity makes it a solid foreground blob whose
+    RETR_EXTERNAL contour traces the true card outline - ignoring its internal
+    print and without the few-pixel inflation of a Canny edge ring. (Canny and
+    adaptive-threshold masks were tried and dropped: they added spurious small
+    rectangles from surface texture and biased the size upward.) A reference
+    that contrasts with the surface - which good capture already requires -
+    separates cleanly under Otsu."""
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return (otsu, cv2.bitwise_not(otsu))
 
 
 def detect_card(bgr: np.ndarray) -> tuple | None:
-    """Find the largest convex card-like quad; returns (long_side_px, bbox)."""
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 50, 150)
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8))
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    """Find the largest card-like rectangle; returns (long_side_px, bbox).
 
+    A card is identified by shape, not exact corners: it fills its bounding
+    rectangle (high rectangularity) and is convex (high solidity), within the
+    card aspect band. Robust to rounded corners, surface print, and cluttered
+    backgrounds that break corner-counting.
+    """
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     img_area = gray.shape[0] * gray.shape[1]
+
     best = None
-    for contour in contours:
-        approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-        if len(approx) != 4 or not cv2.isContourConvex(approx):
-            continue
-        area = cv2.contourArea(approx)
-        if not (CARD_AREA_FRAC[0] * img_area <= area <= CARD_AREA_FRAC[1] * img_area):
-            continue
-        (_, _), (w, h), _ = cv2.minAreaRect(approx)
-        if min(w, h) == 0:
-            continue
-        aspect = max(w, h) / min(w, h)
-        if not (CARD_ASPECT[0] <= aspect <= CARD_ASPECT[1]):
-            continue
-        if best is None or area > best[0]:
-            best = (area, max(w, h), cv2.boundingRect(approx))
+    for mask in _card_masks(gray):
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if not (CARD_AREA_FRAC[0] * img_area <= area <= CARD_AREA_FRAC[1] * img_area):
+                continue
+            (_, _), (w, h), _ = cv2.minAreaRect(contour)
+            if min(w, h) < 1:
+                continue
+            aspect = max(w, h) / min(w, h)
+            if not (CARD_ASPECT[0] <= aspect <= CARD_ASPECT[1]):
+                continue
+            if area / (w * h) < CARD_MIN_RECTANGULARITY:
+                continue
+            hull_area = cv2.contourArea(cv2.convexHull(contour))
+            if hull_area == 0 or area / hull_area < CARD_MIN_SOLIDITY:
+                continue
+            if best is None or area > best[0]:
+                best = (area, max(w, h), cv2.boundingRect(contour))
     if best is None:
         return None
     return best[1], best[2]
