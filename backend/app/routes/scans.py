@@ -16,6 +16,7 @@ from app.services.depth_maps import (
     colorize_depth_map,
 )
 from app.services.mesh_builder import InsufficientPointsError, build_wound_mesh
+from app.services.point_cloud_builder import build_full_point_cloud
 from app.services.scale_calibration import REFERENCE_CHOICES
 from app.services.scan_outputs import find_latest_iteration_dir, scan_depths_dir
 from app.tasks.pipeline_direct import run_pipeline
@@ -137,21 +138,27 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{scan_id}/ply")
 def get_ply(scan_id: str, db: Session = Depends(get_db)):
-    """Serve the cropped wound point cloud, falling back to the full cloud."""
+    """Serve the full-scene RGB point cloud (built once from the raw splat,
+    then cached), so the points view shows everything - no filtering or crop.
+    Falls back to the segmented wound_only.ply if the full build fails.
+    """
     scan = _get_scan_or_404(db, scan_id)
     latest = _latest_iteration_dir_or_404(scan)
 
-    wound_ply = os.path.join(latest, "wound_only.ply")
-    full_ply = os.path.join(latest, "point_cloud.ply")
-    if os.path.exists(wound_ply):
-        ply_path = wound_ply
-    elif os.path.exists(full_ply):
-        ply_path = full_ply
-    else:
-        raise HTTPException(status_code=404, detail="PLY file not found")
+    full_rgb = os.path.join(latest, "points_full.ply")
+    source = os.path.join(latest, "point_cloud.ply")
+    if not os.path.exists(full_rgb) and os.path.exists(source):
+        try:
+            build_full_point_cloud(source, full_rgb)
+        except Exception as exc:
+            print(f"[{scan_id}] full point cloud build failed (non-critical): {exc}")
 
-    return FileResponse(ply_path, media_type="application/octet-stream",
-                        filename=f"wound_{scan_id}.ply")
+    wound_ply = os.path.join(latest, "wound_only.ply")
+    for ply_path in (full_rgb, wound_ply, source):
+        if os.path.exists(ply_path):
+            return FileResponse(ply_path, media_type="application/octet-stream",
+                                filename=f"wound_{scan_id}.ply")
+    raise HTTPException(status_code=404, detail="PLY file not found")
 
 
 @router.get("/{scan_id}/splat")

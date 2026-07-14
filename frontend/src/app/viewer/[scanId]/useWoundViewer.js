@@ -81,7 +81,7 @@ export default function useWoundViewer(scanId) {
           geometry.computeVertexNormals()
 
           const material = new THREE.PointsMaterial({
-            size: 0.25,
+            size: 0.08,
             sizeAttenuation: true,
             ...(geometry.hasAttribute('color')
               ? { vertexColors: true }
@@ -201,11 +201,12 @@ export default function useWoundViewer(scanId) {
     )
   }
 
-  // Lazily build the real Gaussian-splat view. Unlike the points/mesh views
-  // (which use the cropped wound_only.ply via /ply), this loads the full 3DGS
-  // point_cloud.ply with its Gaussian fields intact from /splat, and renders it
-  // with @mkkellogg/gaussian-splats-3d. The DropInViewer is a THREE.Object3D, so
-  // it goes in the same rotation group and the orientation buttons still work.
+  // Lazily build the real Gaussian-splat view. Like the points view (which
+  // gets the full scene as a plain RGB cloud via /ply), this shows everything -
+  // but from /splat: the full 3DGS point_cloud.ply with its Gaussian fields
+  // intact, rendered with @mkkellogg/gaussian-splats-3d. The DropInViewer is a
+  // THREE.Object3D, so it goes in the same rotation group and the orientation
+  // buttons still work.
   const loadSplat = async () => {
     const group = groupRef.current
     if (!group) return
