@@ -90,6 +90,9 @@ export default function ViewerSidebar({
   smoothSurface,
   meshLoading,
   onToggleSmooth,
+  fullScene,
+  fullLoading,
+  onToggleFullScene,
 }) {
   return (
     <div style={{
@@ -122,6 +125,14 @@ export default function ViewerSidebar({
         style={toggleButtonStyle(smoothSurface, meshLoading)}
       >
         {meshLoading ? 'Generating surface…' : (smoothSurface ? 'Show Points' : 'Smooth Surface')}
+      </button>
+
+      <button
+        onClick={onToggleFullScene}
+        disabled={fullLoading}
+        style={toggleButtonStyle(fullScene, fullLoading)}
+      >
+        {fullLoading ? 'Loading full scene…' : (fullScene ? 'Show Wound Only' : 'Show Full Scene')}
       </button>
 
       {depthMapCount > 0 && (

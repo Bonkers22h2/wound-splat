@@ -137,24 +137,29 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{scan_id}/ply")
-def get_ply(scan_id: str, db: Session = Depends(get_db)):
-    """Serve the full-scene RGB point cloud (built once from the raw splat,
-    then cached), so the points view shows everything - no filtering or crop.
-    Falls back to the segmented wound_only.ply if the full build fails.
+def get_ply(scan_id: str, full: bool = False, db: Session = Depends(get_db)):
+    """Serve a point cloud for the points view.
+
+    Default: the color-segmented wound cloud (wound_only.ply). With ?full=true:
+    the complete scene as a plain RGB cloud (points_full.ply, converted once
+    from the raw splat and cached) - no filtering or crop, for inspecting the
+    whole reconstruction. Either falls back to the other if its file is missing.
     """
     scan = _get_scan_or_404(db, scan_id)
     latest = _latest_iteration_dir_or_404(scan)
 
+    wound_ply = os.path.join(latest, "wound_only.ply")
     full_rgb = os.path.join(latest, "points_full.ply")
     source = os.path.join(latest, "point_cloud.ply")
-    if not os.path.exists(full_rgb) and os.path.exists(source):
+
+    if full and not os.path.exists(full_rgb) and os.path.exists(source):
         try:
             build_full_point_cloud(source, full_rgb)
         except Exception as exc:
             print(f"[{scan_id}] full point cloud build failed (non-critical): {exc}")
 
-    wound_ply = os.path.join(latest, "wound_only.ply")
-    for ply_path in (full_rgb, wound_ply, source):
+    candidates = (full_rgb, wound_ply, source) if full else (wound_ply, full_rgb, source)
+    for ply_path in candidates:
         if os.path.exists(ply_path):
             return FileResponse(ply_path, media_type="application/octet-stream",
                                 filename=f"wound_{scan_id}.ply")

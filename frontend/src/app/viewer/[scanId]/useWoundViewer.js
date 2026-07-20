@@ -8,15 +8,17 @@ const NORMALIZED_MODEL_SIZE = 14
 const DEFAULT_CAMERA_Z = 22
 
 /**
- * Owns the three.js scene for a wound scan and the three view modes
- * (point cloud, smooth mesh, Gaussian splat). The point cloud loads on mount;
- * mesh and splat load lazily the first time they are toggled on. All views
- * share one rotation group so the orientation buttons affect them equally.
+ * Owns the three.js scene for a wound scan and its view modes: wound point
+ * cloud (default), full-scene point cloud, smooth mesh, and Gaussian splat.
+ * The wound cloud loads on mount; the others load lazily the first time they
+ * are toggled on. All views share one rotation group so the orientation
+ * buttons affect them equally.
  */
 export default function useWoundViewer(scanId) {
   const mountRef = useRef(null)
   const groupRef = useRef(null) // rotation group shared by all views
-  const pointsRef = useRef(null) // raw point-cloud object
+  const pointsRef = useRef(null) // wound point-cloud object (default view)
+  const fullPointsRef = useRef(null) // full unfiltered scene point cloud (lazy)
   const meshRef = useRef(null) // smooth Poisson mesh (lazy)
   const splatRef = useRef(null) // Gaussian-splat viewer (lazy)
   const cameraRef = useRef(null)
@@ -30,6 +32,8 @@ export default function useWoundViewer(scanId) {
   const [meshLoading, setMeshLoading] = useState(false)
   const [splatView, setSplatView] = useState(false)
   const [splatLoading, setSplatLoading] = useState(false)
+  const [fullScene, setFullScene] = useState(false)
+  const [fullLoading, setFullLoading] = useState(false)
 
   useEffect(() => {
     let disposed = false
@@ -81,7 +85,7 @@ export default function useWoundViewer(scanId) {
           geometry.computeVertexNormals()
 
           const material = new THREE.PointsMaterial({
-            size: 0.08,
+            size: 0.15,
             sizeAttenuation: true,
             ...(geometry.hasAttribute('color')
               ? { vertexColors: true }
@@ -162,6 +166,83 @@ export default function useWoundViewer(scanId) {
     }
   }, [scanId])
 
+  // Show whichever point cloud the fullScene flag selects (used when leaving
+  // the mesh/splat views, so "Show Points" returns to what the user had).
+  const showActivePoints = (wantFullScene) => {
+    if (pointsRef.current) pointsRef.current.visible = !wantFullScene
+    if (fullPointsRef.current) fullPointsRef.current.visible = wantFullScene
+  }
+
+  const hideAllPoints = () => {
+    if (pointsRef.current) pointsRef.current.visible = false
+    if (fullPointsRef.current) fullPointsRef.current.visible = false
+  }
+
+  // Lazily load the complete unfiltered scene cloud (/ply?full=true). It gets
+  // its own centering/normalization from its own bounds - the full scene is
+  // many times larger than the wound crop, so sharing the wound's framing
+  // would push it off-camera.
+  const loadFullPoints = async () => {
+    const group = groupRef.current
+    if (!group) return
+    setFullLoading(true)
+    const THREE = await import('three')
+    const { PLYLoader } = await import('three/examples/jsm/loaders/PLYLoader.js')
+    new PLYLoader().load(
+      scanUrls.ply(scanId, true),
+      (geometry) => {
+        const material = new THREE.PointsMaterial({
+          size: 0.08,
+          sizeAttenuation: true,
+          ...(geometry.hasAttribute('color')
+            ? { vertexColors: true }
+            : { color: 0x1D9E75 }),
+        })
+        const points = new THREE.Points(geometry, material)
+
+        geometry.computeBoundingBox()
+        const box = geometry.boundingBox
+        const center = new THREE.Vector3()
+        box.getCenter(center)
+        geometry.translate(-center.x, -center.y, -center.z)
+        const size = new THREE.Vector3()
+        box.getSize(size)
+        const maxDim = Math.max(size.x, size.y, size.z) || 1
+        points.scale.setScalar(NORMALIZED_MODEL_SIZE / maxDim)
+
+        fullPointsRef.current = points
+        group.add(points)
+        if (pointsRef.current) pointsRef.current.visible = false
+        setFullLoading(false)
+      },
+      undefined,
+      (err) => {
+        console.error('full scene load error:', err)
+        setFullLoading(false)
+        setFullScene(false)
+      }
+    )
+  }
+
+  const toggleFullScene = async () => {
+    const next = !fullScene
+    setFullScene(next)
+    // The full scene is a points-view mode: leave mesh/splat if active.
+    if (splatView) {
+      setSplatView(false)
+      if (splatRef.current) splatRef.current.visible = false
+    }
+    if (smoothSurface) {
+      setSmoothSurface(false)
+      if (meshRef.current) meshRef.current.visible = false
+    }
+    if (next && !fullPointsRef.current) {
+      await loadFullPoints()
+    } else {
+      showActivePoints(next)
+    }
+  }
+
   // Lazily build the smooth mesh surface (Poisson, generated server-side) and
   // add it to the same group as the points so rotation/scale stay in sync.
   const loadMesh = async () => {
@@ -189,7 +270,7 @@ export default function useWoundViewer(scanId) {
         if (scaleRef.current) mesh.scale.setScalar(scaleRef.current)
         meshRef.current = mesh
         group.add(mesh)
-        if (pointsRef.current) pointsRef.current.visible = false
+        hideAllPoints()
         setMeshLoading(false)
       },
       undefined,
@@ -201,12 +282,12 @@ export default function useWoundViewer(scanId) {
     )
   }
 
-  // Lazily build the real Gaussian-splat view. Like the points view (which
-  // gets the full scene as a plain RGB cloud via /ply), this shows everything -
-  // but from /splat: the full 3DGS point_cloud.ply with its Gaussian fields
-  // intact, rendered with @mkkellogg/gaussian-splats-3d. The DropInViewer is a
-  // THREE.Object3D, so it goes in the same rotation group and the orientation
-  // buttons still work.
+  // Lazily build the real Gaussian-splat view: the full 3DGS point_cloud.ply
+  // with its Gaussian fields intact from /splat, rendered with
+  // @mkkellogg/gaussian-splats-3d. Always shows the whole scene (like the
+  // full-scene points toggle, unlike the default wound crop). The DropInViewer
+  // is a THREE.Object3D, so it goes in the same rotation group and the
+  // orientation buttons still work.
   const loadSplat = async () => {
     const group = groupRef.current
     if (!group) return
@@ -242,7 +323,7 @@ export default function useWoundViewer(scanId) {
       dropIn.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
       group.add(dropIn)
       splatRef.current = dropIn
-      if (pointsRef.current) pointsRef.current.visible = false
+      hideAllPoints()
       if (meshRef.current) meshRef.current.visible = false
       setSplatLoading(false)
     } catch (err) {
@@ -261,13 +342,13 @@ export default function useWoundViewer(scanId) {
       if (meshRef.current) meshRef.current.visible = false
       if (splatRef.current) {
         splatRef.current.visible = true
-        if (pointsRef.current) pointsRef.current.visible = false
+        hideAllPoints()
       } else {
         await loadSplat()
       }
     } else {
       if (splatRef.current) splatRef.current.visible = false
-      if (pointsRef.current) pointsRef.current.visible = true
+      showActivePoints(fullScene)
     }
   }
 
@@ -282,13 +363,13 @@ export default function useWoundViewer(scanId) {
       }
       if (meshRef.current) {
         meshRef.current.visible = true
-        if (pointsRef.current) pointsRef.current.visible = false
+        hideAllPoints()
       } else {
         await loadMesh()
       }
     } else {
       if (meshRef.current) meshRef.current.visible = false
-      if (pointsRef.current) pointsRef.current.visible = true
+      showActivePoints(fullScene)
     }
   }
 
@@ -322,8 +403,11 @@ export default function useWoundViewer(scanId) {
     meshLoading,
     splatView,
     splatLoading,
+    fullScene,
+    fullLoading,
     toggleSplat,
     toggleSmooth,
+    toggleFullScene,
     rotateModel,
     resetRotation,
   }

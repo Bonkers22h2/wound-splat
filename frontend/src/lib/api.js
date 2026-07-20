@@ -46,7 +46,8 @@ export const scanApi = {
 // URL builders for assets referenced outside fetch (three.js loaders,
 // <img> tags, and download links).
 export const scanUrls = {
-  ply: (scanId) => `${API_BASE}/scans/${scanId}/ply`,
+  // full=true fetches the complete unfiltered scene instead of the wound crop.
+  ply: (scanId, full = false) => `${API_BASE}/scans/${scanId}/ply${full ? '?full=true' : ''}`,
   splat: (scanId) => `${API_BASE}/scans/${scanId}/splat`,
   mesh: (scanId) => `${API_BASE}/scans/${scanId}/mesh`,
   depthImage: (scanId, name) => `${API_BASE}/scans/${scanId}/depth/${name}`,
