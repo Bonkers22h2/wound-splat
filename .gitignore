@@ -15,6 +15,7 @@ backend/data/uploads/
 backend/data/outputs/
 gaussian-splatting/output/
 gaussian-splatting/data/
+gaussian-splatting/validation/
 *.ply
 *.mp4
 *.mov
@@ -49,3 +50,4 @@ data/
 gaussian-splatting/SIBR_viewers/ 
 gaussian-splatting/submodules/diff-gaussian-rasterization/third_party/ 
 gaussian-splatting/submodules/fused-ssim/ 
+wound_splat_documentation.docx

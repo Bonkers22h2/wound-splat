@@ -39,6 +39,21 @@ def filter_splat(ply_path, output_path=None,
     n = len(v)
     print(f"Total gaussians: {n}")
 
+    # ── TEMPORARY (thesis): noise filtering disabled ───────────────────────
+    # We want the splat viewer to show the COMPLETE reconstruction - every
+    # gaussian, background and floaters included - not the cleaned wound.
+    # This writes all gaussians straight through and skips the cascade below.
+    # To restore noise filtering, set FILTER_ENABLED = True.
+    FILTER_ENABLED = False
+    if not FILTER_ENABLED:
+        if output_path is None:
+            output_path = ply_path.replace("point_cloud.ply", "wound_splat.ply")
+        PlyData([PlyElement.describe(v, "vertex")], text=False,
+                byte_order="<").write(output_path)
+        print(f"[FILTER DISABLED] wrote all {n} gaussians (unfiltered) to {output_path}")
+        return output_path
+    # ───────────────────────────────────────────────────────────────────────
+
     xyz = np.stack([v["x"], v["y"], v["z"]], axis=1).astype(np.float64)
 
     # Work on a set of indices into the ORIGINAL array so we can map every

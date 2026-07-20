@@ -26,6 +26,7 @@ function MeasurementsList({ measurements }) {
     { label: 'Width', value: `${measurements.width_cm} cm` },
     { label: 'Height', value: `${measurements.height_cm} cm` },
   ]
+  const calibrated = measurements.scale_calibrated
   return (
     <div style={{ marginBottom: '1.5rem' }}>
       <p style={{ fontSize: '11px', fontWeight: 700, color: COLORS.primary, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
@@ -40,6 +41,16 @@ function MeasurementsList({ measurements }) {
           <span style={{ fontWeight: 600 }}>{row.value}</span>
         </div>
       ))}
+      <p style={{
+        marginTop: '0.6rem', fontSize: '12px', borderRadius: '6px', padding: '6px 10px',
+        background: calibrated ? '#f0fdf4' : '#fffbeb',
+        color: calibrated ? '#166534' : '#92400e',
+        border: `1px solid ${calibrated ? '#bbf7d0' : '#fde68a'}`,
+      }}>
+        {calibrated
+          ? 'Scale calibrated from the size reference in the video'
+          : 'Uncalibrated scale — sizes are approximate. Include a bank card or coin next to the wound when filming.'}
+      </p>
     </div>
   )
 }
@@ -79,6 +90,9 @@ export default function ViewerSidebar({
   smoothSurface,
   meshLoading,
   onToggleSmooth,
+  fullScene,
+  fullLoading,
+  onToggleFullScene,
 }) {
   return (
     <div style={{
@@ -111,6 +125,14 @@ export default function ViewerSidebar({
         style={toggleButtonStyle(smoothSurface, meshLoading)}
       >
         {meshLoading ? 'Generating surface…' : (smoothSurface ? 'Show Points' : 'Smooth Surface')}
+      </button>
+
+      <button
+        onClick={onToggleFullScene}
+        disabled={fullLoading}
+        style={toggleButtonStyle(fullScene, fullLoading)}
+      >
+        {fullLoading ? 'Loading full scene…' : (fullScene ? 'Show Wound Only' : 'Show Full Scene')}
       </button>
 
       {depthMapCount > 0 && (

@@ -24,7 +24,7 @@ Wound segmentation + measurement
 PDF report + interactive 3D viewer
 ```
 
-**Validated accuracy:** 85.8% (tested against known-dimension cube and sphere objects)
+**Measurement geometry validated** against synthetic wound phantoms with analytic ground truth: all metrics within 10% (most within 4%) — see [Validation](#validation). Absolute scale is calibrated from a bank card or coin placed next to the wound during capture.
 
 ---
 
@@ -234,7 +234,7 @@ When a patient uploads a video, the backend automatically runs an 8-step pipelin
 | 3 | 3D Gaussian Splatting | Train 3D model (30,000 iterations) with depth prior if step 2.5 succeeded |
 | 4 | render.py | Generate rendered preview images |
 | 5 | wound_segment.py | Isolate wound tissue from point cloud |
-| 6 | wound_measure.py | Compute surface area, volume, max depth |
+| 6 | estimate_scale.py + wound_measure.py | Calibrate absolute scale from the card/coin in frame, then measure relative to a plane fitted to the surrounding skin: planar area, cavity volume, max depth, PCA-aligned width/height |
 | 7 | generate_report.py | Generate PDF assessment report |
 
 Step 2.5 is non-critical — if depth generation fails (e.g. `transformers` not installed), training continues without the depth prior and the **"Show AI Depth Maps"** button will not appear for that scan.
@@ -267,8 +267,9 @@ wound-splat/
 └── gaussian-splatting/        3DGS pipeline (graphdeco-inria) + custom scripts
     ├── generate_depth.py       AI monocular depth map generation (Depth Anything V2)
     ├── wound_segment.py        Wound tissue segmentation
-    ├── wound_measure.py        Wound measurement (Open3D)
-    └── validate_accuracy.py    Accuracy validation against known objects
+    ├── estimate_scale.py       Absolute-scale calibration from a card/coin in frame
+    ├── wound_measure.py        Reference-plane wound measurement (Open3D)
+    └── validate_accuracy.py    Accuracy validation against synthetic wound phantoms
 ```
 
 ---
@@ -288,23 +289,35 @@ wound-splat/
 
 ## Validation
 
-Accuracy was validated using synthetic objects with known dimensions:
+### Measurement geometry (automated)
 
-| Object | Dimensions Error | Volume Error | Accuracy |
-|---|---|---|---|
-| Cube (5cm) | 0% | 50.0% | 85.3% |
-| Sphere (r=3cm) | 0% | 50.2% | 86.4% |
-| **Overall** | **~0%** | **~50%** | **85.8%** |
+`python gaussian-splatting/validate_accuracy.py` generates synthetic wound phantoms — craters of known opening area, cavity volume, depth and extents, rotated and noised — and runs the real `wound_measure.py` on them:
 
-Dimension and depth measurements are highly accurate. Volume is systematically underestimated due to non-watertight mesh reconstruction — a known limitation documented for future work.
+| Phantom | Area | Volume | Depth | Width | Height |
+|---|---|---|---|---|---|
+| Spherical cap (r=1.5cm, 8mm deep) | 3.9% | 0.8% | 1.4% | 2.7% | 2.7% |
+| Half-ellipsoid (4×2cm, 6mm deep) | 3.4% | 1.3% | 2.3% | 2.5% | 1.5% |
+| Shallow crater (r=2cm, 3mm deep) | 7.2% | 0.5% | 6.3% | 0.7% | 0.5% |
+
+(Errors vs analytic ground truth; the suite also verifies the `--scale` calibration path reproduces identical real-world values.)
+
+This validates the measurement math, **not** the 3D reconstruction. End-to-end accuracy also depends on capture quality and scale calibration.
+
+### Full pipeline (physical)
+
+To validate the whole chain, film a real object of known size with a card/coin beside it and run it as a scan:
+
+- **Rubik's cube** (measure yours; standard ≈ 57 mm/side) — validates scale, dimensions and surface area.
+- **Bowl or measuring cup with a known volume of water** (e.g. 100 ml marked, filmed empty) — validates cavity depth and volume, which convex objects cannot.
 
 ---
 
 ## Known Limitations
 
 - Single-user, local execution — no concurrent scan processing (single GPU)
-- Scale assumes 1 unit = 1cm based on dataset calibration; real-world deployment requires a reference object (e.g. ArUco markers) in frame
-- Volume measurements have ~50% error due to non-watertight Poisson reconstruction
+- Absolute scale requires a bank card or coin placed flat next to the wound during capture; without one (or when detection refuses), measurements fall back to an uncalibrated 1 unit = 1 cm assumption and are flagged as approximate in the viewer
+- Depth and volume need 1–2 cm of healthy skin around the wound in frame — the reference plane is fitted to that margin
+- ArUco marker support (higher-accuracy printed reference) would require swapping `opencv-python` for `opencv-contrib-python`; deliberately deferred
 - Each scan generates ~1GB of output data (point clouds, renders)
 
 ---

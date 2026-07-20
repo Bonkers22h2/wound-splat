@@ -95,6 +95,9 @@ export default function ViewerPage() {
           smoothSurface={viewer.smoothSurface}
           meshLoading={viewer.meshLoading}
           onToggleSmooth={viewer.toggleSmooth}
+          fullScene={viewer.fullScene}
+          fullLoading={viewer.fullLoading}
+          onToggleFullScene={viewer.toggleFullScene}
         />
       </div>
     </>

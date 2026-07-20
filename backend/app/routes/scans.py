@@ -3,7 +3,7 @@ import os
 import shutil
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,8 @@ from app.services.depth_maps import (
     colorize_depth_map,
 )
 from app.services.mesh_builder import InsufficientPointsError, build_wound_mesh
+from app.services.point_cloud_builder import build_full_point_cloud
+from app.services.scale_calibration import REFERENCE_CHOICES
 from app.services.scan_outputs import find_latest_iteration_dir, scan_depths_dir
 from app.tasks.pipeline_direct import run_pipeline
 
@@ -71,11 +73,14 @@ def _scan_detail(scan: Scan) -> dict:
 async def upload_scan(
     patient_id: str,
     file: UploadFile = File(...),
+    reference_object: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    if reference_object and reference_object not in REFERENCE_CHOICES:
+        raise HTTPException(status_code=422, detail="Unknown reference object")
 
     scan_id = str(uuid.uuid4())
     file_path = os.path.join(UPLOAD_DIR, f"{scan_id}_{file.filename}")
@@ -88,6 +93,7 @@ async def upload_scan(
         video_filename=file.filename,
         video_path=os.path.abspath(file_path),
         status=ScanStatus.QUEUED,
+        reference_object=reference_object or None,
     )
     db.add(scan)
     db.commit()
@@ -124,26 +130,40 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
         "registration_rate": scan.registration_rate,
         "frames_extracted": scan.frames_extracted,
         "frames_registered": scan.frames_registered,
+        "reference_object": scan.reference_object,
+        "scale_cm_per_unit": scan.scale_cm_per_unit,
+        "scale_calibrated": scan.scale_cm_per_unit is not None,
     }
 
 
 @router.get("/{scan_id}/ply")
-def get_ply(scan_id: str, db: Session = Depends(get_db)):
-    """Serve the cropped wound point cloud, falling back to the full cloud."""
+def get_ply(scan_id: str, full: bool = False, db: Session = Depends(get_db)):
+    """Serve a point cloud for the points view.
+
+    Default: the color-segmented wound cloud (wound_only.ply). With ?full=true:
+    the complete scene as a plain RGB cloud (points_full.ply, converted once
+    from the raw splat and cached) - no filtering or crop, for inspecting the
+    whole reconstruction. Either falls back to the other if its file is missing.
+    """
     scan = _get_scan_or_404(db, scan_id)
     latest = _latest_iteration_dir_or_404(scan)
 
     wound_ply = os.path.join(latest, "wound_only.ply")
-    full_ply = os.path.join(latest, "point_cloud.ply")
-    if os.path.exists(wound_ply):
-        ply_path = wound_ply
-    elif os.path.exists(full_ply):
-        ply_path = full_ply
-    else:
-        raise HTTPException(status_code=404, detail="PLY file not found")
+    full_rgb = os.path.join(latest, "points_full.ply")
+    source = os.path.join(latest, "point_cloud.ply")
 
-    return FileResponse(ply_path, media_type="application/octet-stream",
-                        filename=f"wound_{scan_id}.ply")
+    if full and not os.path.exists(full_rgb) and os.path.exists(source):
+        try:
+            build_full_point_cloud(source, full_rgb)
+        except Exception as exc:
+            print(f"[{scan_id}] full point cloud build failed (non-critical): {exc}")
+
+    candidates = (full_rgb, wound_ply, source) if full else (wound_ply, full_rgb, source)
+    for ply_path in candidates:
+        if os.path.exists(ply_path):
+            return FileResponse(ply_path, media_type="application/octet-stream",
+                                filename=f"wound_{scan_id}.ply")
+    raise HTTPException(status_code=404, detail="PLY file not found")
 
 
 @router.get("/{scan_id}/splat")
