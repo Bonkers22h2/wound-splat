@@ -85,6 +85,10 @@ COIN_MAX_FRAME_FRAC = 0.30
 TISSUE_HUE_BANDS = ((0, 15), (170, 180))
 TISSUE_MIN_SATURATION = 60
 
+# The wound blob must cover at least this fraction of the frame to anchor the
+# containment gate below (smaller red specks say nothing about geometry).
+WOUND_BLOB_MIN_FRAC = 0.0005
+
 # Depth lookup: expand the detection box by this factor when collecting
 # sparse points, and require at least this many points under it.
 DEPTH_BOX_EXPAND = 1.2
@@ -99,6 +103,13 @@ MIN_ESTIMATES = 3
 INLIER_BAND = 0.20
 SPREAD_WARN = 0.08
 SPREAD_REJECT = 0.15
+
+# The agreeing detections must also span at least this many positions in the
+# sampled frame sequence. Adjacent frames see the same scene from the same
+# pose, so their agreement is self-agreement: 3 consecutive frames of a
+# misdetected object pass MIN_ESTIMATES with near-zero spread. A real
+# reference is re-detected across an arc of the orbit.
+MIN_ESTIMATE_SPAN = 5
 
 # Frames sampled for detection. The reference appears in only a fraction of an
 # orbit's frames (blur, occlusion, grazing angles), so sample generously -
@@ -120,6 +131,25 @@ def _card_masks(gray: np.ndarray):
     return (otsu, cv2.bitwise_not(otsu))
 
 
+def _wound_centroid(bgr: np.ndarray) -> tuple | None:
+    """Centroid of the largest tissue-colored blob (the wound), or None."""
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    hue, sat = hsv[:, :, 0], hsv[:, :, 1]
+    mask = np.zeros(hue.shape, np.uint8)
+    for lo, hi in TISSUE_HUE_BANDS:
+        mask |= ((hue >= lo) & (hue <= hi)).astype(np.uint8)
+    mask &= (sat >= TISSUE_MIN_SATURATION).astype(np.uint8)
+    mask = cv2.morphologyEx(mask * 255, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    n, _, stats, centroids = cv2.connectedComponentsWithStats(mask)
+    if n < 2:
+        return None
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    biggest = int(areas.argmax())
+    if areas[biggest] < WOUND_BLOB_MIN_FRAC * mask.size:
+        return None
+    return tuple(centroids[1 + biggest])
+
+
 def detect_card(bgr: np.ndarray) -> tuple | None:
     """Find the largest card-like rectangle; returns (long_side_px, bbox).
 
@@ -127,9 +157,16 @@ def detect_card(bgr: np.ndarray) -> tuple | None:
     rectangle (high rectangularity) and is convex (high solidity), within the
     card aspect band. Robust to rounded corners, surface print, and cluttered
     backgrounds that break corner-counting.
+
+    A card also lies BESIDE the wound, never around it: any candidate whose
+    box CONTAINS the wound is the sheet/backdrop the wound sits on - a printed
+    A4/Letter sheet is white, rectangular and card-aspect, and measuring it as
+    the card silently corrupts the scale by ~3.5x. Such candidates are
+    rejected via the wound-centroid containment gate.
     """
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     img_area = gray.shape[0] * gray.shape[1]
+    wound = _wound_centroid(bgr)
 
     best = None
     for mask in _card_masks(gray):
@@ -149,6 +186,10 @@ def detect_card(bgr: np.ndarray) -> tuple | None:
             hull_area = cv2.contourArea(cv2.convexHull(contour))
             if hull_area == 0 or area / hull_area < CARD_MIN_SOLIDITY:
                 continue
+            if wound is not None:
+                bx, by, bw, bh = cv2.boundingRect(contour)
+                if bx <= wound[0] <= bx + bw and by <= wound[1] <= by + bh:
+                    continue
             if best is None or area > best[0]:
                 best = (area, max(w, h), cv2.boundingRect(contour))
     if best is None:
@@ -252,7 +293,8 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
     images = images[::step][:max_frames]
 
     estimates = []
-    for im in images:
+    positions = []  # index in the sampled sequence, for the span check
+    for pos, im in enumerate(images):
         path = os.path.join(images_dir, im.name)
         if not os.path.exists(path):
             continue
@@ -286,6 +328,7 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
         size_units = size_px * z / fx
         scale_cm = (real_mm / 10.0) / size_units
         estimates.append(scale_cm)
+        positions.append(pos)
         print(f"  {im.name}: {size_px:.0f} px at depth {z:.3f} -> {scale_cm:.5f} cm/unit")
 
     if len(estimates) < MIN_ESTIMATES:
@@ -295,11 +338,20 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
     # Occasional misdetections land far from the true scale: keep the band
     # around the median and re-aggregate on it.
     estimates = np.array(estimates)
+    positions = np.array(positions)
     median = np.median(estimates)
-    inliers = estimates[np.abs(estimates - median) <= INLIER_BAND * median]
+    inlier_mask = np.abs(estimates - median) <= INLIER_BAND * median
+    inliers = estimates[inlier_mask]
     if len(inliers) < MIN_ESTIMATES:
         print(f"Detections too inconsistent ({len(inliers)} of {len(estimates)} "
               f"agree) - refusing to calibrate")
+        return None
+
+    span = int(positions[inlier_mask].max() - positions[inlier_mask].min())
+    if span < MIN_ESTIMATE_SPAN:
+        print(f"Agreeing detections all come from {span + 1} adjacent frames - "
+              f"that is one viewpoint, not independent evidence; refusing to "
+              f"calibrate")
         return None
 
     scale = float(np.median(inliers))

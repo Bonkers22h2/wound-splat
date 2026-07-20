@@ -327,11 +327,13 @@ def _segment_wound(scan_id: str, output_dir: str) -> str:
 
     ply_path = os.path.join(iter_dir, "point_cloud.ply")
     wound_only_path = os.path.join(iter_dir, "wound_only.ply")
-    subprocess.run([
+    result = subprocess.run([
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/wound_segment.py",
         "--ply", ply_path,
         "--output", wound_only_path,
     ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+    if result.returncode != 0 or not os.path.exists(wound_only_path):
+        raise PipelineError(f"Wound segmentation failed: {result.stderr[-2000:]}")
 
     # Also produce a noise-filtered gaussian splat (wound_splat.ply) for the
     # real splat viewer. Non-critical: the /splat endpoint falls back to the
@@ -362,6 +364,8 @@ def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
         cmd += ["--scale", str(scale)]
     result = subprocess.run(cmd, capture_output=True, text=True,
                             cwd=GAUSSIAN_SPLATTING_DIR)
+    if result.returncode != 0:
+        raise PipelineError(f"Wound measurement failed: {result.stderr[-2000:]}")
     return parse_measurements(result.stdout)
 
 
