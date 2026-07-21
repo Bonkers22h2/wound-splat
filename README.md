@@ -15,8 +15,6 @@ Smartphone video
       ↓
 COLMAP (Structure-from-Motion)
       ↓
-Depth Anything V2 (AI depth prior)
-      ↓
 3D Gaussian Splatting (3DGS)
       ↓
 Wound segmentation + measurement
@@ -32,7 +30,7 @@ PDF report + interactive 3D viewer
 
 ### Hardware
 - **NVIDIA GPU with 6GB+ VRAM** and CUDA support (tested on RTX 4050). An NVIDIA GPU is mandatory — the 3DGS training and CUDA extensions will not run on CPU or non-NVIDIA hardware.
-- ~2–3 GB free disk per scan (point clouds, renders, depth maps).
+- ~2–3 GB free disk per scan (point clouds and renders).
 
 ### Software (Windows 10/11)
 | Component | Version | Notes |
@@ -143,7 +141,7 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```powershell
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126
 ```
-> The `--extra-index-url` flag lets pip re-resolve the pinned `+cu126` torch lines without error. This step also installs **Depth Anything V2** support (`transformers` + `huggingface_hub`), which powers pipeline step 2.5 and the **"Show AI Depth Maps"** viewer button.
+> The `--extra-index-url` flag lets pip re-resolve the pinned `+cu126` torch lines without error.
 >
 > **Note:** `requirements.txt` references `diff-gaussian-rasterization` and `simple-knn` via **relative paths** (`../gaussian-splatting/submodules/...`), so it is portable — but that means you must run `pip install -r requirements.txt` **from the `backend/` directory** for them to resolve. These are the CUDA extensions; because they build with MSVC, pip may fail to compile them at this step (the build environment is loaded in Step 5). If so, that's expected — let Step 5 build them. To install only the Python deps here and defer the extensions, you can temporarily comment out those two lines and rely on Step 5.
 
@@ -224,22 +222,19 @@ Open the app at **http://localhost:3000**
 
 ## How It Works
 
-When a patient uploads a video, the backend automatically runs an 8-step pipeline in a background thread:
+When a patient uploads a video, the backend automatically runs a 7-step pipeline in a background thread:
 
 | Step | Tool | Description |
 |---|---|---|
 | 1 | ffmpeg | Extract frames from video |
 | 2 | COLMAP | Structure-from-Motion — compute camera poses + sparse point cloud |
-| 2.5 | generate_depth.py | Generate AI monocular depth maps (Depth Anything V2) for depth regularization |
-| 3 | 3D Gaussian Splatting | Train 3D model (30,000 iterations) with depth prior if step 2.5 succeeded |
+| 3 | 3D Gaussian Splatting | Train 3D model (30,000 iterations) |
 | 4 | render.py | Generate rendered preview images |
 | 5 | wound_segment.py | Isolate wound tissue from point cloud |
 | 6 | estimate_scale.py + wound_measure.py | Calibrate absolute scale from the card/coin in frame, then measure relative to a plane fitted to the surrounding skin: planar area, cavity volume, max depth, PCA-aligned width/height |
 | 7 | generate_report.py | Generate PDF assessment report |
 
-Step 2.5 is non-critical — if depth generation fails (e.g. `transformers` not installed), training continues without the depth prior and the **"Show AI Depth Maps"** button will not appear for that scan.
-
-Processing time: ~30–60 minutes per scan depending on GPU and video length. On the first scan after setup, Depth Anything V2 downloads its model weights from HuggingFace (~400 MB, cached afterward).
+Processing time: ~30–60 minutes per scan depending on GPU and video length.
 
 ---
 
@@ -256,7 +251,7 @@ wound-splat/
 │   │       └── pipeline_direct.py   Main pipeline runner
 │   ├── generate_report.py    PDF report generator (ReportLab)
 │   ├── init_db.py            Database initializer
-│   ├── requirements.txt      Python dependencies (incl. Depth Anything V2)
+│   ├── requirements.txt      Python dependencies
 │   └── main.py               FastAPI entry point
 ├── frontend/                  Next.js app
 │   ├── next.config.ts         Dev proxy: /api/* → http://localhost:8000
@@ -265,7 +260,6 @@ wound-splat/
 │       ├── admin/              Clinical admin dashboard
 │       └── viewer/[scanId]/    Interactive 3D point cloud viewer
 └── gaussian-splatting/        3DGS pipeline (graphdeco-inria) + custom scripts
-    ├── generate_depth.py       AI monocular depth map generation (Depth Anything V2)
     ├── wound_segment.py        Wound tissue segmentation
     ├── estimate_scale.py       Absolute-scale calibration from a card/coin in frame
     ├── wound_measure.py        Reference-plane wound measurement (Open3D)
@@ -282,7 +276,6 @@ wound-splat/
 | `pip install -r requirements.txt` fails on `torch==2.12.0+cu126` | You skipped Step 3 / the `--extra-index-url` flag. Add `--extra-index-url https://download.pytorch.org/whl/cu126`. |
 | Compiling extensions fails with `cl.exe not found` | The MSVC environment isn't loaded. Run `vcvars64.bat` (or use the *x64 Native Tools Command Prompt*) before `pip install --no-build-isolation .`. |
 | `colmap` / `ffmpeg` "not recognized" | Not on PATH. Add their folders to PATH and open a **new** terminal. |
-| No **"Show AI Depth Maps"** button in the viewer | Depth step 2.5 failed for that scan (usually `transformers` missing). Ensure `transformers` is installed (`pip show transformers`), then reprocess the scan. |
 | Frontend loads but data/3D model never appears | Backend not running on port 8000, or started without the MSVC env. Check Terminal 1 for CUDA-extension import errors. |
 
 ---

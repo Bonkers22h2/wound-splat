@@ -1,8 +1,6 @@
 """Locating files that the 3DGS pipeline writes into a scan's output folders."""
 import os
 
-from app.paths import GAUSSIAN_SPLATTING_DIR
-
 ITERATION_DIR_PREFIX = "iteration_"
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
@@ -21,16 +19,6 @@ def find_latest_iteration_dir(output_dir: str) -> str | None:
         return None
     folders.sort(key=lambda name: int(name.split("_")[1]), reverse=True)
     return os.path.join(pc_dir, folders[0])
-
-
-def scan_data_dir(scan_id: str) -> str:
-    """Working directory holding a scan's extracted frames, COLMAP data, and depths."""
-    return os.path.join(str(GAUSSIAN_SPLATTING_DIR), "data", f"scan_{scan_id}")
-
-
-def scan_depths_dir(scan_id: str) -> str:
-    """Directory holding a scan's AI-generated depth maps."""
-    return os.path.join(scan_data_dir(scan_id), "depths")
 
 
 def count_images(directory: str) -> int:

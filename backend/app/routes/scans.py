@@ -1,24 +1,19 @@
-"""Scan endpoints: upload, status, and serving pipeline outputs (PLY/splat/mesh/depths)."""
+"""Scan endpoints: upload, status, and serving pipeline outputs (PLY/splat/mesh)."""
 import os
 import shutil
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.db import Patient, Scan, ScanStatus
 from app.paths import UPLOAD_DIR
-from app.services.depth_maps import (
-    DepthMapEncodeError,
-    DepthMapReadError,
-    colorize_depth_map,
-)
 from app.services.mesh_builder import InsufficientPointsError, build_wound_mesh
 from app.services.point_cloud_builder import build_full_point_cloud
 from app.services.scale_calibration import REFERENCE_CHOICES
-from app.services.scan_outputs import find_latest_iteration_dir, scan_depths_dir
+from app.services.scan_outputs import find_latest_iteration_dir
 from app.tasks.pipeline_direct import run_pipeline
 
 router = APIRouter()
@@ -211,34 +206,6 @@ def get_mesh(scan_id: str, db: Session = Depends(get_db)):
 
     return FileResponse(mesh_path, media_type="application/octet-stream",
                         filename=f"mesh_{scan_id}.ply")
-
-
-@router.get("/{scan_id}/depths")
-def list_depths(scan_id: str):
-    """List the AI depth-map frames available for this scan."""
-    depths_dir = scan_depths_dir(scan_id)
-    if not os.path.isdir(depths_dir):
-        return {"depths": []}
-    names = sorted(f for f in os.listdir(depths_dir) if f.lower().endswith(".png"))
-    return {"depths": names, "count": len(names)}
-
-
-@router.get("/{scan_id}/depth/{name}")
-def get_depth(scan_id: str, name: str):
-    """Serve one depth map, colorized (TURBO: near=red, far=blue) for viewing."""
-    name = os.path.basename(name)  # prevent path traversal
-    path = os.path.join(scan_depths_dir(scan_id), name)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Depth map not found")
-
-    try:
-        png_bytes = colorize_depth_map(path)
-    except DepthMapReadError:
-        raise HTTPException(status_code=404, detail="Could not read depth map")
-    except DepthMapEncodeError:
-        raise HTTPException(status_code=500, detail="Failed to encode depth image")
-
-    return Response(content=png_bytes, media_type="image/png")
 
 
 @router.get("/patient/{patient_id}")
