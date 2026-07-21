@@ -126,10 +126,10 @@ python -m pip install --upgrade pip
 ```
 
 ### 3. Install PyTorch (CUDA 12.6 build) — do this FIRST
-`requirements.txt` pins the CUDA wheels `torch==2.12.0+cu126` (and matching `torchvision`/`torchaudio`). These are **not** on the default PyPI index, so install them from the PyTorch CUDA index before anything else:
+`requirements.txt` pins the CUDA wheels `torch==2.12.0+cu126` (and matching `torchvision`). These are **not** on the default PyPI index, so install them from the PyTorch CUDA index before anything else:
 
 ```powershell
-pip install torch==2.12.0+cu126 torchvision==0.27.0+cu126 torchaudio==2.11.0+cu126 `
+pip install torch==2.12.0+cu126 torchvision==0.27.0+cu126 `
   --index-url https://download.pytorch.org/whl/cu126
 ```
 
