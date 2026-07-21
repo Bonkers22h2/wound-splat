@@ -129,7 +129,7 @@ export default function AdminPage() {
                               {scan.current_step_name
                                 ? `Step ${scan.current_step}/7: ${scan.current_step_name}`
                                 : 'Starting...'}
-                              {scan.current_step === 3 && scan.progress_percent > 0
+                              {scan.progress_percent > 0
                                 ? ` (${Math.round(scan.progress_percent)}%)`
                                 : ''}
                             </div>
@@ -138,9 +138,7 @@ export default function AdminPage() {
                                 height: '100%',
                                 borderRadius: '999px',
                                 background: '#1e40af',
-                                width: scan.current_step
-                                  ? `${(((scan.current_step - 1) + (scan.progress_percent || 0) / 100) / 7) * 100}%`
-                                  : '0%',
+                                width: `${scan.progress_percent || 0}%`,
                                 transition: 'width 0.5s ease'
                               }} />
                             </div>

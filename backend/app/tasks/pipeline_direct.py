@@ -6,9 +6,11 @@ thread, so only one scan uses the GPU at a time; the rest wait as QUEUED.
 Each numbered step updates the scan's progress row so the frontend can show
 live status.
 """
+import glob
 import os
 import queue
 import re
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -51,6 +53,16 @@ STEP_NAMES = {
 
 # Matches tqdm-style output: "Training progress:  45%|####      | 3150/7000"
 TRAINING_PROGRESS_PATTERN = re.compile(r"(\d+)%\|")
+
+# generate_depth.py prints "[depth] 30/102" as it works through the images.
+DEPTH_PROGRESS_PATTERN = re.compile(r"\[depth\] (\d+)/(\d+)")
+
+# COLMAP is a C++ program launched through convert.py; when its stdout is a
+# pipe the OS block-buffers it, so its "Matching block" progress lines don't
+# arrive until a stage ends (the bar would freeze mid-stage). Instead we poll
+# COLMAP's own SQLite database, which it commits to as it works, and read
+# progress straight from the row counts. Poll cadence in seconds:
+COLMAP_POLL_INTERVAL = 2.0
 
 
 class PipelineError(Exception):
@@ -150,7 +162,7 @@ def _pipeline_task(scan_id: str) -> None:
         update_progress(scan_id, 1, 100)
 
         update_progress(scan_id, 2, 0)
-        _run_colmap(data_dir)
+        _run_colmap(scan_id, data_dir)
         update_progress(scan_id, 2, 100)
 
         update_registration_stats(scan_id, count_images(input_dir), count_images(images_dir))
@@ -224,12 +236,24 @@ def _extract_frames(video_path: str, input_dir: str) -> None:
         raise PipelineError(f"ffmpeg failed: {result.stderr}")
 
 
-def _run_colmap(data_dir: str) -> None:
-    """Step 2: Structure-from-Motion (camera poses + sparse point cloud)."""
-    result = subprocess.run([
-        sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/convert.py",
-        "-s", data_dir,
-    ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+def _run_colmap(scan_id: str, data_dir: str) -> None:
+    """Step 2: Structure-from-Motion (camera poses + sparse point cloud).
+
+    A background thread polls COLMAP's database so the (often minutes-long)
+    feature/matching stages drive a live progress bar instead of sitting frozen
+    at 0% - COLMAP's own stdout is block-buffered through the pipe and can't be
+    parsed live."""
+    stop = threading.Event()
+    poller = threading.Thread(
+        target=_poll_colmap_progress, args=(scan_id, data_dir, stop), daemon=True)
+    poller.start()
+    try:
+        result = subprocess.run(
+            [sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/convert.py", "-s", data_dir],
+            capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
+    finally:
+        stop.set()
+        poller.join(timeout=COLMAP_POLL_INTERVAL + 1)
     if result.returncode != 0:
         raise PipelineError(f"COLMAP failed: {result.stderr}")
 
@@ -244,13 +268,15 @@ def _generate_depth_priors(scan_id: str, data_dir: str, images_dir: str) -> bool
     depths_dir = f"{data_dir}/depths"
     os.makedirs(depths_dir, exist_ok=True)
     try:
-        generation = subprocess.run([
-            sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/generate_depth.py",
+        # -u: unbuffered stdout so the script's "[depth] i/n" lines stream in
+        # live for the progress bar instead of being block-buffered.
+        returncode, output = _run_streaming([
+            sys.executable, "-u", f"{GAUSSIAN_SPLATTING_DIR}/generate_depth.py",
             "--images", images_dir,
             "--output", depths_dir,
-        ], capture_output=True, text=True, cwd=GAUSSIAN_SPLATTING_DIR)
-        if generation.returncode != 0:
-            print(f"[{scan_id}] depth generation failed (non-critical): {generation.stderr[-1000:]}")
+        ], cwd=GAUSSIAN_SPLATTING_DIR, on_line=_depth_line_parser(scan_id))
+        if returncode != 0:
+            print(f"[{scan_id}] depth generation failed (non-critical): {output[-1000:]}")
             return False
 
         scale = subprocess.run([
@@ -284,14 +310,15 @@ def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str, use_
         train_cmd += ["-d", "depths",
                       "--depth_l1_weight_final", str(DEPTH_L1_WEIGHT_FINAL)]
 
-    returncode, output = _run_with_training_progress(
-        train_cmd, cwd=GAUSSIAN_SPLATTING_DIR, scan_id=scan_id, step=3)
+    returncode, output = _run_streaming(
+        train_cmd, cwd=GAUSSIAN_SPLATTING_DIR, on_line=_training_line_parser(scan_id))
     if returncode != 0:
         raise PipelineError(f"3DGS training failed: {output[-2000:]}")
 
 
-def _run_with_training_progress(cmd, cwd, scan_id, step):
-    """Run a subprocess and parse 3DGS training progress from stdout in real-time."""
+def _run_streaming(cmd, cwd, on_line=None):
+    """Run a subprocess, feeding each merged stdout/stderr line to on_line as it
+    arrives so callers can surface live progress. Returns (returncode, output)."""
     process = subprocess.Popen(
         cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1, universal_newlines=True,
@@ -300,12 +327,87 @@ def _run_with_training_progress(cmd, cwd, scan_id, step):
     full_output = []
     for line in process.stdout:
         full_output.append(line)
-        match = TRAINING_PROGRESS_PATTERN.search(line)
-        if match:
-            update_progress(scan_id, step, float(match.group(1)))
+        if on_line is not None:
+            on_line(line)
 
     process.wait()
     return process.returncode, "".join(full_output)
+
+
+def _colmap_db_percent(db_path: str, sparse_dir: str) -> float | None:
+    """Read step-2 progress straight from COLMAP's database + sparse output.
+
+    Stages are laid out across the bar: feature extraction 2-25% (descriptors
+    accumulate, one per image), matching 25-69% (matched pairs accumulate
+    toward the exhaustive pair count), and mapper 90% once a sparse model has
+    been written. Returns None until the database exists (COLMAP just started).
+    """
+    if not os.path.exists(db_path):
+        return None
+    try:
+        db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=1.0)
+        try:
+            n_images = db.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+            n_desc = db.execute("SELECT COUNT(*) FROM descriptors").fetchone()[0]
+            n_matches = db.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return None  # transient lock while COLMAP writes; try again next poll
+
+    if n_images == 0:
+        return 2.0
+    # A written sparse sub-model means matching is done and the reconstruction
+    # exists; undistortion/copy finishes the step from here.
+    if glob.glob(os.path.join(sparse_dir, "*", "images.bin")):
+        return 90.0
+    # Feature extraction: descriptors fill in one per image.
+    if n_desc < n_images:
+        return round(2 + 23 * n_desc / n_images, 1)
+    # Matching: matched pairs climb toward the exhaustive pair count. Capped
+    # below 70 because some pairs share no matches, so the count can plateau
+    # before the stage actually ends.
+    total_pairs = n_images * (n_images - 1) / 2
+    if total_pairs <= 0:
+        return 25.0
+    return round(min(25 + 45 * min(n_matches / total_pairs, 1.0), 69.0), 1)
+
+
+def _poll_colmap_progress(scan_id: str, data_dir: str, stop: threading.Event) -> None:
+    """Background loop: push COLMAP db-derived progress until told to stop."""
+    db_path = os.path.join(data_dir, "distorted", "database.db")
+    sparse_dir = os.path.join(data_dir, "distorted", "sparse")
+    last = -1.0
+    while not stop.wait(COLMAP_POLL_INTERVAL):
+        pct = _colmap_db_percent(db_path, sparse_dir)
+        if pct is not None and pct != last:
+            last = pct
+            update_progress(scan_id, 2, pct)
+
+
+def _depth_line_parser(scan_id):
+    """Drive the step-2.5 bar from generate_depth.py's "[depth] i/n" lines."""
+    state = {"pct": -1}
+
+    def on_line(line):
+        m = DEPTH_PROGRESS_PATTERN.search(line)
+        if m:
+            pct = round(100 * int(m.group(1)) / max(int(m.group(2)), 1))
+            if pct != state["pct"]:
+                state["pct"] = pct
+                update_progress(scan_id, 2.5, pct)
+
+    return on_line
+
+
+def _training_line_parser(scan_id):
+    """Drive the step-3 bar from 3DGS's tqdm percentage."""
+    def on_line(line):
+        match = TRAINING_PROGRESS_PATTERN.search(line)
+        if match:
+            update_progress(scan_id, 3, float(match.group(1)))
+
+    return on_line
 
 
 def _render_previews(output_dir: str) -> None:
