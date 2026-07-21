@@ -18,8 +18,3 @@ body {
   background: var(--surface);
   color: var(--text);
 }
-
-.status-queued    { color: #92400e; background: #fef3c7; }
-.status-processing { color: #1e40af; background: #dbeafe; }
-.status-rendered  { color: #065f46; background: #d1fae5; }
-.status-failed    { color: #991b1b; background: #fee2e2; }
