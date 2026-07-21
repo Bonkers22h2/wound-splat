@@ -27,7 +27,6 @@ export const scanApi = {
   listForPatient: (patientId) => getJson(`/scans/patient/${patientId}`),
   adminQueue: () => getJson('/scans/admin/queue'),
   measurements: (scanId) => getJson(`/scans/${scanId}/measurements`),
-  depthMaps: (scanId) => getJson(`/scans/${scanId}/depths`),
 
   // referenceObject: known-size object in the video used for absolute-scale
   // calibration (e.g. 'card', 'coin:us_quarter'); omit/null when none.
@@ -50,6 +49,5 @@ export const scanUrls = {
   ply: (scanId, full = false) => `${API_BASE}/scans/${scanId}/ply${full ? '?full=true' : ''}`,
   splat: (scanId) => `${API_BASE}/scans/${scanId}/splat`,
   mesh: (scanId) => `${API_BASE}/scans/${scanId}/mesh`,
-  depthImage: (scanId, name) => `${API_BASE}/scans/${scanId}/depth/${name}`,
   reportPdf: (scanId) => `${API_BASE}/reports/${scanId}/pdf`,
 }

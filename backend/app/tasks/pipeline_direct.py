@@ -31,19 +31,12 @@ TRAIN_ITERATIONS = 30000
 # at a minor detail cost. Set to 1 for full resolution on a bigger GPU.
 TRAIN_RESOLUTION = 2
 
-# Final weight of the AI-depth regularization. 3DGS's default decays to 0.01,
-# which lets smooth/low-texture areas thin back out (re-open hollows) late in
-# training. Holding it higher (0.2) keeps the depth prior filling those areas
-# through the whole run. Raise toward ~0.5 for even more aggressive filling.
-DEPTH_L1_WEIGHT_FINAL = 0.2
-
 # Frames per second sampled out of the uploaded video.
 FRAME_EXTRACTION_FPS = 2
 
 STEP_NAMES = {
     1: "Extracting frames",
     2: "Running COLMAP (Structure-from-Motion)",
-    2.5: "Generating AI depth maps (Depth Anything V2)",
     3: "Training 3D Gaussian Splatting",
     4: "Rendering preview images",
     5: "Segmenting wound tissue",
@@ -53,9 +46,6 @@ STEP_NAMES = {
 
 # Matches tqdm-style output: "Training progress:  45%|####      | 3150/7000"
 TRAINING_PROGRESS_PATTERN = re.compile(r"(\d+)%\|")
-
-# generate_depth.py prints "[depth] 30/102" as it works through the images.
-DEPTH_PROGRESS_PATTERN = re.compile(r"\[depth\] (\d+)/(\d+)")
 
 # COLMAP is a C++ program launched through convert.py; when its stdout is a
 # pipe the OS block-buffers it, so its "Matching block" progress lines don't
@@ -167,12 +157,8 @@ def _pipeline_task(scan_id: str) -> None:
 
         update_registration_stats(scan_id, count_images(input_dir), count_images(images_dir))
 
-        update_progress(scan_id, 2.5, 0)
-        depth_ok = _generate_depth_priors(scan_id, data_dir, images_dir)
-        update_progress(scan_id, 2.5, 100)
-
         update_progress(scan_id, 3, 0)
-        _train_gaussian_splatting(scan_id, data_dir, output_dir, use_depth=depth_ok)
+        _train_gaussian_splatting(scan_id, data_dir, output_dir)
         update_progress(scan_id, 3, 100)
 
         update_progress(scan_id, 4, 0)
@@ -258,46 +244,8 @@ def _run_colmap(scan_id: str, data_dir: str) -> None:
         raise PipelineError(f"COLMAP failed: {result.stderr}")
 
 
-def _generate_depth_priors(scan_id: str, data_dir: str, images_dir: str) -> bool:
-    """Step 2.5: AI monocular depth (Depth Anything V2) -> depth prior for training.
-
-    Gives the optimizer geometry on smooth/low-texture surfaces that
-    photogrammetry leaves hollow. Non-critical: if it fails, we simply train
-    without the depth prior instead of failing the whole scan.
-    """
-    depths_dir = f"{data_dir}/depths"
-    os.makedirs(depths_dir, exist_ok=True)
-    try:
-        # -u: unbuffered stdout so the script's "[depth] i/n" lines stream in
-        # live for the progress bar instead of being block-buffered.
-        returncode, output = _run_streaming([
-            sys.executable, "-u", f"{GAUSSIAN_SPLATTING_DIR}/generate_depth.py",
-            "--images", images_dir,
-            "--output", depths_dir,
-        ], cwd=GAUSSIAN_SPLATTING_DIR, on_line=_depth_line_parser(scan_id))
-        if returncode != 0:
-            print(f"[{scan_id}] depth generation failed (non-critical): {output[-1000:]}")
-            return False
-
-        scale = subprocess.run([
-            sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/utils/make_depth_scale.py",
-            "--base_dir", data_dir,
-            "--depths_dir", depths_dir,
-            "--model_type", "bin",
-        ], capture_output=True, text=True,
-            cwd=os.path.join(GAUSSIAN_SPLATTING_DIR, "utils"))
-        if scale.returncode != 0:
-            print(f"[{scan_id}] depth scale alignment failed (non-critical): {scale.stderr[-1000:]}")
-            return False
-        return True
-    except Exception as exc:
-        print(f"[{scan_id}] depth step error (non-critical): {exc}")
-        return False
-
-
-def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str, use_depth: bool) -> None:
-    """Step 3: train 3DGS with live progress. Adds the depth prior (-d depths)
-    only when step 2.5 produced a valid depth_params.json."""
+def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str) -> None:
+    """Step 3: train 3DGS with live progress."""
     train_cmd = [
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
         "-s", data_dir,
@@ -306,9 +254,6 @@ def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str, use_
         "--iterations", str(TRAIN_ITERATIONS),
         "--save_iterations", str(TRAIN_ITERATIONS),
     ]
-    if use_depth:
-        train_cmd += ["-d", "depths",
-                      "--depth_l1_weight_final", str(DEPTH_L1_WEIGHT_FINAL)]
 
     returncode, output = _run_streaming(
         train_cmd, cwd=GAUSSIAN_SPLATTING_DIR, on_line=_training_line_parser(scan_id))
@@ -383,21 +328,6 @@ def _poll_colmap_progress(scan_id: str, data_dir: str, stop: threading.Event) ->
         if pct is not None and pct != last:
             last = pct
             update_progress(scan_id, 2, pct)
-
-
-def _depth_line_parser(scan_id):
-    """Drive the step-2.5 bar from generate_depth.py's "[depth] i/n" lines."""
-    state = {"pct": -1}
-
-    def on_line(line):
-        m = DEPTH_PROGRESS_PATTERN.search(line)
-        if m:
-            pct = round(100 * int(m.group(1)) / max(int(m.group(2)), 1))
-            if pct != state["pct"]:
-                state["pct"] = pct
-                update_progress(scan_id, 2.5, pct)
-
-    return on_line
 
 
 def _training_line_parser(scan_id):

@@ -5,7 +5,6 @@ import Navbar from '../../components/Navbar'
 import { scanApi } from '@/lib/api'
 import useWoundViewer from './useWoundViewer'
 import OrientationControls from './OrientationControls'
-import DepthMapPanel from './DepthMapPanel'
 import ViewerSidebar from './ViewerSidebar'
 
 const VIEWER_BACKGROUND = '#0a0f0d'
@@ -15,13 +14,9 @@ export default function ViewerPage() {
   const viewer = useWoundViewer(scanId)
 
   const [measurements, setMeasurements] = useState(null)
-  const [depthMaps, setDepthMaps] = useState([])
-  const [depthIndex, setDepthIndex] = useState(0)
-  const [showDepth, setShowDepth] = useState(false)
 
   useEffect(() => {
     scanApi.measurements(scanId).then(setMeasurements).catch(() => {})
-    scanApi.depthMaps(scanId).then(data => setDepthMaps(data.depths || [])).catch(() => {})
   }, [scanId])
 
   const viewerReady = !viewer.loading && !viewer.error
@@ -72,23 +67,11 @@ export default function ViewerPage() {
             </div>
           )}
 
-          {viewerReady && showDepth && depthMaps.length > 0 && (
-            <DepthMapPanel
-              scanId={scanId}
-              depthMaps={depthMaps}
-              depthIndex={depthIndex}
-              onIndexChange={setDepthIndex}
-              onClose={() => setShowDepth(false)}
-            />
-          )}
         </div>
 
         <ViewerSidebar
           scanId={scanId}
           measurements={measurements}
-          depthMapCount={depthMaps.length}
-          showDepth={showDepth}
-          onToggleDepth={() => setShowDepth(s => !s)}
           splatView={viewer.splatView}
           splatLoading={viewer.splatLoading}
           onToggleSplat={viewer.toggleSplat}

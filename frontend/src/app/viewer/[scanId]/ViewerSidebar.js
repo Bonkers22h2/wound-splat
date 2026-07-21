@@ -81,9 +81,6 @@ function ReconstructionQuality({ measurements }) {
 export default function ViewerSidebar({
   scanId,
   measurements,
-  depthMapCount,
-  showDepth,
-  onToggleDepth,
   splatView,
   splatLoading,
   onToggleSplat,
@@ -134,12 +131,6 @@ export default function ViewerSidebar({
       >
         {fullLoading ? 'Loading full scene…' : (fullScene ? 'Show Wound Only' : 'Show Full Scene')}
       </button>
-
-      {depthMapCount > 0 && (
-        <button onClick={onToggleDepth} style={toggleButtonStyle(showDepth, false)}>
-          {showDepth ? 'Hide' : 'Show'} AI Depth Maps ({depthMapCount})
-        </button>
-      )}
 
       <a
         href={scanUrls.reportPdf(scanId)}
