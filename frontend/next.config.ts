@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   // no effect on production builds.
   allowedDevOrigins: ['*.proxy.runpod.net'],
   experimental: {
+    // Proxied requests (the /api rewrite below) buffer the body with a 10MB
+    // default cap, which truncated wound-video uploads and reset the socket.
+    // Raise it to cover the 100MB client-side upload limit, with headroom.
+    proxyClientMaxBodySize: '150mb',
     serverActions: {
       bodySizeLimit: '100mb',
     },
