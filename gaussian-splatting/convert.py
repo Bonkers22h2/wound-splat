@@ -11,6 +11,7 @@
 
 import os
 import logging
+import subprocess
 from argparse import ArgumentParser
 import shutil
 
@@ -70,14 +71,32 @@ if not args.skip_matching:
 
     ## Feature matching
     # Looser ratio/distance thresholds + guided matching recover many more
-    # matches on repetitive, low-contrast wound surfaces.
+    # matches on repetitive, low-contrast wound surfaces. The option prefixes
+    # moved between COLMAP versions (SiftMatching.* on <=3.9, FeatureMatching.* /
+    # TwoViewGeometry.* on newer builds), so probe --help and use whatever this
+    # build exposes; skip anything it doesn't recognize rather than aborting.
+    matcher_help = subprocess.run(
+        f"{colmap_command} exhaustive_matcher --help",
+        shell=True, capture_output=True, text=True)
+    matcher_help_text = (matcher_help.stdout or "") + (matcher_help.stderr or "")
+
+    def matcher_opt(name, value):
+        for prefix in ("SiftMatching", "FeatureMatching", "TwoViewGeometry"):
+            if f"--{prefix}.{name}" in matcher_help_text:
+                return f"--{prefix}.{name} {value} "
+        # If the --help probe returned nothing, fall back to the long-stable
+        # SiftMatching prefix so the critical use_gpu flag is still applied.
+        if not matcher_help_text.strip():
+            return f"--SiftMatching.{name} {value} "
+        return ""
+
     feat_matching_cmd = (
         f"{colmap_command} exhaustive_matcher "
         f"--database_path \"{args.source_path}/distorted/database.db\" "
-        f"--SiftMatching.use_gpu {sift_match_gpu} "
-        f"--FeatureMatching.guided_matching 1 "
-        f"--SiftMatching.max_ratio 0.85 "
-        f"--SiftMatching.max_distance 0.8"
+        + matcher_opt("use_gpu", sift_match_gpu)
+        + matcher_opt("guided_matching", 1)
+        + matcher_opt("max_ratio", 0.85)
+        + matcher_opt("max_distance", 0.8)
     )
     exit_code = os.system(feat_matching_cmd)
     if exit_code != 0:
