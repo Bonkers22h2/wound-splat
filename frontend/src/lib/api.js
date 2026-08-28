@@ -1,10 +1,9 @@
 // Central client for the FastAPI backend. All calls go through the Next.js
-// /api rewrite (see next.config.ts), which proxies to the backend.
+// /api rewrite (see next.config.ts), which proxies to the backend. Using the
+// relative /api path keeps every request same-origin, so the app works both
+// locally and behind a remote proxy (e.g. a cloud GPU pod) where an absolute
+// localhost URL would resolve to the viewer's own machine, not the server.
 const API_BASE = '/api'
-
-// Video uploads (up to 100MB) go straight to the backend instead of through
-// the dev-server proxy, so large request bodies are not buffered by Next.
-const BACKEND_DIRECT_URL = 'http://localhost:8000'
 
 async function getJson(path) {
   const res = await fetch(`${API_BASE}${path}`)
@@ -34,7 +33,7 @@ export const scanApi = {
     const formData = new FormData()
     formData.append('file', file)
     if (referenceObject) formData.append('reference_object', referenceObject)
-    const res = await fetch(`${BACKEND_DIRECT_URL}/scans/upload/${patientId}`, {
+    const res = await fetch(`${API_BASE}/scans/upload/${patientId}`, {
       method: 'POST',
       body: formData,
     })
