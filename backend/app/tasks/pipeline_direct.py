@@ -28,8 +28,9 @@ TRAIN_ITERATIONS = 30000
 
 # Downscale training images by this factor (-r). 2 = half-resolution each side
 # (~4x fewer pixels) -> much lower VRAM + faster training on the 6GB RTX 4050,
-# at a minor detail cost. Set to 1 for full resolution on a bigger GPU.
-TRAIN_RESOLUTION = 2
+# at a minor detail cost. Set TRAIN_RESOLUTION=1 in the environment for full
+# resolution on a bigger GPU (e.g. a cloud A40).
+TRAIN_RESOLUTION = int(os.getenv("TRAIN_RESOLUTION", "2"))
 
 # Frames per second sampled out of the uploaded video.
 FRAME_EXTRACTION_FPS = 2

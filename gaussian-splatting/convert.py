@@ -30,6 +30,11 @@ magick_command = '"{}"'.format(args.magick_executable) if len(
     args.magick_executable) > 0 else "magick"
 use_gpu = 1 if not args.no_gpu else 0
 
+# On headless servers with a CUDA-less COLMAP build, SIFT matching falls back to
+# an OpenGL matcher that needs a display and fails. Set COLMAP_SIFT_MATCH_GPU=0
+# to force CPU matching there. Defaults to 1 so the local CUDA COLMAP is unchanged.
+sift_match_gpu = os.getenv("COLMAP_SIFT_MATCH_GPU", "1")
+
 if not args.skip_matching:
     os.makedirs(args.source_path + "/distorted/sparse", exist_ok=True)
 
@@ -59,6 +64,7 @@ if not args.skip_matching:
     feat_matching_cmd = (
         f"{colmap_command} exhaustive_matcher "
         f"--database_path \"{args.source_path}/distorted/database.db\" "
+        f"--SiftMatching.use_gpu {sift_match_gpu} "
         f"--FeatureMatching.guided_matching 1 "
         f"--SiftMatching.max_ratio 0.85 "
         f"--SiftMatching.max_distance 0.8"
