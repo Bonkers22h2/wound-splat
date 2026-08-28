@@ -14,6 +14,14 @@ import logging
 from argparse import ArgumentParser
 import shutil
 
+# COLMAP's CLI is built against Qt and still spins up a QApplication, which on a
+# headless Linux host (no DISPLAY) aborts trying to open an xcb display. Fall
+# back to Qt's offscreen platform so feature extraction/matching run without a
+# display. Guarded so a local desktop (Windows, or Linux with a display) is
+# untouched and keeps using its normal GPU/GUI COLMAP path.
+if os.name == "posix" and not os.environ.get("DISPLAY"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 # This Python script is based on the shell converter script provided in the MipNerF 360 repository.
 parser = ArgumentParser("Colmap converter")
 parser.add_argument("--no_gpu", action='store_true')
