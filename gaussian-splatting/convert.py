@@ -56,7 +56,9 @@ if not args.skip_matching:
     exit_code = os.system(feat_extracton_cmd)
     if exit_code != 0:
         logging.error(f"Feature extraction failed with code {exit_code}. Exiting.")
-        exit(exit_code)
+        # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
     ## Feature matching
     # Looser ratio/distance thresholds + guided matching recover many more
@@ -72,7 +74,9 @@ if not args.skip_matching:
     exit_code = os.system(feat_matching_cmd)
     if exit_code != 0:
         logging.error(f"Feature matching failed with code {exit_code}. Exiting.")
-        exit(exit_code)
+        # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
     ### Bundle adjustment
     # The default Mapper tolerance is unnecessarily large,
@@ -93,7 +97,9 @@ if not args.skip_matching:
     exit_code = os.system(mapper_cmd)
     if exit_code != 0:
         logging.error(f"Mapper failed with code {exit_code}. Exiting.")
-        exit(exit_code)
+        # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
 ### Select the best sub-model.
 ## When matching is imperfect COLMAP splits the reconstruction into several
@@ -157,20 +163,26 @@ if(args.resize):
         exit_code = os.system(f'{magick_command} mogrify -resize 50% "{destination_file}"')
         if exit_code != 0:
             logging.error(f"50% resize failed with code {exit_code}. Exiting.")
-            exit(exit_code)
+            # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
         destination_file = os.path.join(args.source_path, "images_4", file)
         shutil.copy2(source_file, destination_file)
         exit_code = os.system(f'{magick_command} mogrify -resize 25% "{destination_file}"')
         if exit_code != 0:
             logging.error(f"25% resize failed with code {exit_code}. Exiting.")
-            exit(exit_code)
+            # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
         destination_file = os.path.join(args.source_path, "images_8", file)
         shutil.copy2(source_file, destination_file)
         exit_code = os.system(f'{magick_command} mogrify -resize 12.5% "{destination_file}"')
         if exit_code != 0:
             logging.error(f"12.5% resize failed with code {exit_code}. Exiting.")
-            exit(exit_code)
+            # exit(exit_code) would pass a POSIX wait-status (e.g. 256 for a real
+        # exit code 1), which wraps to 0 and hides the failure from the caller.
+        exit(1)
 
 print("Done.")
