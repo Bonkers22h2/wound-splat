@@ -11,7 +11,7 @@ class PatientCreate(BaseModel):
     name: str
     patient_code: str
 
-@router.post("/")
+@router.post("")
 def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
     existing = db.query(Patient).filter(
         Patient.patient_code == patient.patient_code
@@ -29,7 +29,7 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
     db.refresh(new_patient)
     return new_patient
 
-@router.get("/")
+@router.get("")
 def get_all_patients(db: Session = Depends(get_db)):
     patients = db.query(Patient).all()
     return patients

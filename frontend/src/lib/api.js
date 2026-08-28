@@ -11,11 +11,11 @@ async function getJson(path) {
 }
 
 export const patientApi = {
-  list: () => getJson('/patients/'),
+  list: () => getJson('/patients'),
 
   // Returns the raw Response so callers can inspect res.ok and error details.
   create: (patient) =>
-    fetch(`${API_BASE}/patients/`, {
+    fetch(`${API_BASE}/patients`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patient),
