@@ -21,7 +21,10 @@ pkill -f uvicorn 2>/dev/null; sleep 2
 nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /workspace/backend.log 2>&1 &
 
 # --- Frontend (Next.js dev, port 8888 = the pod's exposed HTTP port) ---
+# The pod template auto-starts JupyterLab on 8888, so free it first or the
+# frontend can't bind and the proxy keeps showing Jupyter.
 cd "$REPO/frontend"
+pkill -f jupyter 2>/dev/null
 pkill -f "next dev" 2>/dev/null; pkill -f next-server 2>/dev/null; sleep 2
 nohup npm run dev -- -H 0.0.0.0 -p 8888 > /workspace/frontend.log 2>&1 &
 
