@@ -1,11 +1,4 @@
-"""Video -> 3D Gaussian Splatting -> wound measurement pipeline.
-
-Runs inside the API process (no Celery/Redis required). Uploaded scans are
-enqueued and processed first-come-first-served by a single background worker
-thread, so only one scan uses the GPU at a time; the rest wait as QUEUED.
-Each numbered step updates the scan's progress row so the frontend can show
-live status.
-"""
+"""Runs a scan from video all the way to wound measurements, one at a time."""
 import glob
 import os
 import queue
@@ -26,13 +19,10 @@ from app.services.scan_outputs import count_images, find_latest_iteration_dir
 
 TRAIN_ITERATIONS = 30000
 
-# Downscale training images by this factor (-r). 2 = half-resolution each side
-# (~4x fewer pixels) -> much lower VRAM + faster training on the 6GB RTX 4050,
-# at a minor detail cost. Set TRAIN_RESOLUTION=1 in the environment for full
-# resolution on a bigger GPU (e.g. a cloud A40).
+# how much to shrink training images (2 = half size, less vram; 1 = full size)
 TRAIN_RESOLUTION = int(os.getenv("TRAIN_RESOLUTION", "2"))
 
-# Frames per second sampled out of the uploaded video.
+# how many frames per second to pull from the video
 FRAME_EXTRACTION_FPS = 2
 
 STEP_NAMES = {
@@ -45,35 +35,32 @@ STEP_NAMES = {
     7: "Generating PDF report",
 }
 
-# Matches tqdm-style output: "Training progress:  45%|####      | 3150/7000"
+# finds the percent in training output like "45%|####  | 3150/7000"
 TRAINING_PROGRESS_PATTERN = re.compile(r"(\d+)%\|")
 
-# COLMAP is a C++ program launched through convert.py; when its stdout is a
-# pipe the OS block-buffers it, so its "Matching block" progress lines don't
-# arrive until a stage ends (the bar would freeze mid-stage). Instead we poll
-# COLMAP's own SQLite database, which it commits to as it works, and read
-# progress straight from the row counts. Poll cadence in seconds:
+# how often (seconds) to check colmap's progress from its database
 COLMAP_POLL_INTERVAL = 2.0
 
 
 class PipelineError(Exception):
-    """Raised when a pipeline step fails; the message is stored on the scan."""
+    # raised when a pipeline step fails
+    pass
 
 
-# FIFO queue of scan ids, drained by a single worker thread so scans are
-# processed one at a time in upload order (the GPU can't fit two trainings).
+# queue of scan ids, processed one at a time so only one scan uses the gpu
 _scan_queue: "queue.Queue[str]" = queue.Queue()
 _worker_lock = threading.Lock()
 _worker_thread: threading.Thread | None = None
 
 
 def run_pipeline(scan_id: str) -> None:
-    """Enqueue a scan for processing; it stays QUEUED until the worker picks it up."""
+    # add a scan to the queue for the worker to process
     _ensure_worker_started()
     _scan_queue.put(scan_id)
 
 
 def _ensure_worker_started() -> None:
+    # start the background worker thread if it isn't already running
     global _worker_thread
     with _worker_lock:
         if _worker_thread is not None and _worker_thread.is_alive():
@@ -85,21 +72,20 @@ def _ensure_worker_started() -> None:
 
 
 def _worker_loop() -> None:
-    """Process queued scans one at a time, first-come-first-served."""
+    # keep pulling scans off the queue and running them one by one
     while True:
         scan_id = _scan_queue.get()
         try:
             _pipeline_task(scan_id)
         except Exception as exc:
-            # _pipeline_task handles its own errors; this guards the worker
-            # so one unexpected failure can't kill the whole queue.
+            # catch anything unexpected so one bad scan doesn't kill the worker
             print(f"[{scan_id}] Unexpected pipeline error: {exc}")
         finally:
             _scan_queue.task_done()
 
 
 def update_progress(scan_id: str, step: float, percent: float = 0.0) -> None:
-    """Update scan progress in the DB."""
+    # save the current step and percent so the frontend can show progress
     db = SessionLocal()
     try:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -113,7 +99,7 @@ def update_progress(scan_id: str, step: float, percent: float = 0.0) -> None:
 
 
 def update_registration_stats(scan_id: str, frames_extracted: int, frames_registered: int) -> None:
-    """Store frame registration counts and the computed rate in the DB."""
+    # save how many frames colmap used and the success rate
     db = SessionLocal()
     try:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -130,6 +116,7 @@ def update_registration_stats(scan_id: str, frames_extracted: int, frames_regist
 
 
 def _pipeline_task(scan_id: str) -> None:
+    # run all the steps for one scan and mark it done or failed at the end
     db = SessionLocal()
     try:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -213,7 +200,7 @@ def _pipeline_task(scan_id: str) -> None:
 
 
 def _extract_frames(video_path: str, input_dir: str) -> None:
-    """Step 1: sample frames out of the uploaded video with ffmpeg."""
+    # step 1: pull image frames out of the video with ffmpeg
     result = subprocess.run([
         "ffmpeg", "-i", video_path,
         "-vf", f"fps={FRAME_EXTRACTION_FPS}",
@@ -224,12 +211,7 @@ def _extract_frames(video_path: str, input_dir: str) -> None:
 
 
 def _run_colmap(scan_id: str, data_dir: str) -> None:
-    """Step 2: Structure-from-Motion (camera poses + sparse point cloud).
-
-    A background thread polls COLMAP's database so the (often minutes-long)
-    feature/matching stages drive a live progress bar instead of sitting frozen
-    at 0% - COLMAP's own stdout is block-buffered through the pipe and can't be
-    parsed live."""
+    # step 2: run colmap to work out camera poses, polling its db for progress
     stop = threading.Event()
     poller = threading.Thread(
         target=_poll_colmap_progress, args=(scan_id, data_dir, stop), daemon=True)
@@ -246,7 +228,7 @@ def _run_colmap(scan_id: str, data_dir: str) -> None:
 
 
 def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str) -> None:
-    """Step 3: train 3DGS with live progress."""
+    # step 3: train the gaussian splat model
     train_cmd = [
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/train.py",
         "-s", data_dir,
@@ -263,8 +245,7 @@ def _train_gaussian_splatting(scan_id: str, data_dir: str, output_dir: str) -> N
 
 
 def _run_streaming(cmd, cwd, on_line=None):
-    """Run a subprocess, feeding each merged stdout/stderr line to on_line as it
-    arrives so callers can surface live progress. Returns (returncode, output)."""
+    # run a command and hand each output line to on_line as it comes in
     process = subprocess.Popen(
         cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1, universal_newlines=True,
@@ -281,13 +262,7 @@ def _run_streaming(cmd, cwd, on_line=None):
 
 
 def _colmap_db_percent(db_path: str, sparse_dir: str) -> float | None:
-    """Read step-2 progress straight from COLMAP's database + sparse output.
-
-    Stages are laid out across the bar: feature extraction 2-25% (descriptors
-    accumulate, one per image), matching 25-69% (matched pairs accumulate
-    toward the exhaustive pair count), and mapper 90% once a sparse model has
-    been written. Returns None until the database exists (COLMAP just started).
-    """
+    # estimate colmap's progress by reading row counts from its database
     if not os.path.exists(db_path):
         return None
     try:
@@ -299,20 +274,17 @@ def _colmap_db_percent(db_path: str, sparse_dir: str) -> float | None:
         finally:
             db.close()
     except sqlite3.Error:
-        return None  # transient lock while COLMAP writes; try again next poll
+        return None  # db is locked while colmap writes, just try again next time
 
     if n_images == 0:
         return 2.0
-    # A written sparse sub-model means matching is done and the reconstruction
-    # exists; undistortion/copy finishes the step from here.
+    # a sparse model on disk means matching is done
     if glob.glob(os.path.join(sparse_dir, "*", "images.bin")):
         return 90.0
-    # Feature extraction: descriptors fill in one per image.
+    # feature extraction: one descriptor set per image
     if n_desc < n_images:
         return round(2 + 23 * n_desc / n_images, 1)
-    # Matching: matched pairs climb toward the exhaustive pair count. Capped
-    # below 70 because some pairs share no matches, so the count can plateau
-    # before the stage actually ends.
+    # matching: count matched pairs against all possible pairs
     total_pairs = n_images * (n_images - 1) / 2
     if total_pairs <= 0:
         return 25.0
@@ -320,7 +292,7 @@ def _colmap_db_percent(db_path: str, sparse_dir: str) -> float | None:
 
 
 def _poll_colmap_progress(scan_id: str, data_dir: str, stop: threading.Event) -> None:
-    """Background loop: push COLMAP db-derived progress until told to stop."""
+    # keep updating colmap progress in the background until told to stop
     db_path = os.path.join(data_dir, "distorted", "database.db")
     sparse_dir = os.path.join(data_dir, "distorted", "sparse")
     last = -1.0
@@ -332,7 +304,7 @@ def _poll_colmap_progress(scan_id: str, data_dir: str, stop: threading.Event) ->
 
 
 def _training_line_parser(scan_id):
-    """Drive the step-3 bar from 3DGS's tqdm percentage."""
+    # make a callback that reads the training percent out of each line
     def on_line(line):
         match = TRAINING_PROGRESS_PATTERN.search(line)
         if match:
@@ -342,7 +314,7 @@ def _training_line_parser(scan_id):
 
 
 def _render_previews(output_dir: str) -> None:
-    """Step 4: render preview images of the trained splat (used in the PDF report)."""
+    # step 4: render preview images of the trained splat for the report
     subprocess.run([
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/render.py",
         "-m", output_dir,
@@ -350,10 +322,7 @@ def _render_previews(output_dir: str) -> None:
 
 
 def _segment_wound(scan_id: str, output_dir: str) -> str:
-    """Step 5: crop the wound point cloud and build a noise-filtered splat.
-
-    Returns the path to wound_only.ply (used by measurement in step 6).
-    """
+    # step 5: cut out just the wound and return the path to wound_only.ply
     iter_dir = find_latest_iteration_dir(output_dir)
     if iter_dir is None:
         raise PipelineError("No iteration_* output folder found after training")
@@ -368,9 +337,7 @@ def _segment_wound(scan_id: str, output_dir: str) -> str:
     if result.returncode != 0 or not os.path.exists(wound_only_path):
         raise PipelineError(f"Wound segmentation failed: {result.stderr[-2000:]}")
 
-    # Also produce a noise-filtered gaussian splat (wound_splat.ply) for the
-    # real splat viewer. Non-critical: the /splat endpoint falls back to the
-    # raw point_cloud.ply if this is missing, so don't fail the run over it.
+    # also make a cleaned-up splat for the viewer, but don't fail if it errors
     try:
         subprocess.run([
             sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/segment_splat.py",
@@ -384,11 +351,7 @@ def _segment_wound(scan_id: str, output_dir: str) -> str:
 
 
 def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
-    """Step 6: measure the cropped wound cloud and parse the printed values.
-
-    scale (cm per cloud unit) comes from reference-object calibration; when
-    None the measurer runs with its legacy 1-unit-=-1-cm assumption.
-    """
+    # step 6: measure the wound cloud, using the real scale if we have one
     cmd = [
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
         "--ply", wound_only_path,
@@ -403,6 +366,7 @@ def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
 
 
 def _save_measurements(db, scan_id: str, measurements: dict) -> None:
+    # save the measurement values to the database
     db.add(Measurement(
         scan_id=scan_id,
         surface_area_cm2=measurements.get("surface_area_cm2"),

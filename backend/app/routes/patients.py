@@ -13,6 +13,7 @@ class PatientCreate(BaseModel):
 
 @router.post("")
 def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
+    # add a new patient, rejecting duplicate patient codes
     existing = db.query(Patient).filter(
         Patient.patient_code == patient.patient_code
     ).first()
@@ -31,11 +32,13 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
 
 @router.get("")
 def get_all_patients(db: Session = Depends(get_db)):
+    # return every patient
     patients = db.query(Patient).all()
     return patients
 
 @router.get("/{patient_id}")
 def get_patient(patient_id: str, db: Session = Depends(get_db)):
+    # look up a single patient by id
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")

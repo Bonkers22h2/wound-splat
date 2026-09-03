@@ -23,6 +23,7 @@ LIGHT_GRAY = colors.HexColor('#f9fafb')
 BORDER = colors.HexColor('#e5e7eb')
 
 def get_recommendation(surface_area, volume, max_depth):
+    # pick a severity level and care recommendations based on the measurements
     recs = []
     if max_depth > 20:
         severity = "severe"
@@ -91,7 +92,7 @@ def get_recommendation(surface_area, volume, max_depth):
 def generate_report(scan_id, patient_name, patient_code, video_filename,
                     output_dir, measurements, template_dir=None, registration_rate=None,
                     render_iteration=15000):
-
+    # build the full pdf report for a scan and save it to the output folder
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
                             rightMargin=1.8*cm, leftMargin=1.8*cm,
@@ -119,6 +120,7 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
 
     # ── SECTION HELPER ──────────────────────────────────────────────
     def section_title(text):
+        # add a styled section heading to the report
         story.append(Spacer(1, 0.3*cm))
         story.append(Paragraph(f'<font color="#0F6E56"><b>{text.upper()}</b></font>',
                                ParagraphStyle('st', fontSize=10, spaceAfter=4)))

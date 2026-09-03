@@ -1,36 +1,31 @@
-"""Poisson surface reconstruction of the wound point cloud (built once, then cached)."""
+"""Builds a surface mesh from the wound point cloud."""
 
-# Statistical outlier removal: drop points far from their neighborhood.
+# settings for removing stray points
 OUTLIER_NEIGHBORS = 20
 OUTLIER_STD_RATIO = 2.0
 
-# Below this many points Poisson reconstruction produces garbage.
+# need at least this many points to make a decent mesh
 MIN_POINTS_FOR_MESH = 100
 
-# Normal estimation parameters (units follow the scan's world scale).
+# settings for estimating point normals
 NORMAL_SEARCH_RADIUS = 0.5
 NORMAL_MAX_NEIGHBORS = 30
 NORMAL_ORIENT_K = 15
 
-# Poisson octree depth: higher = finer surface but slower and noisier.
+# poisson detail level (higher = finer but slower)
 POISSON_DEPTH = 9
 
-# Trim vertices in the lowest density percentile (Poisson hallucinates
-# low-density "balloon" surfaces around sparse regions).
+# drop the lowest-density vertices to remove poisson artifacts
 LOW_DENSITY_PERCENTILE = 10
 
 
 class InsufficientPointsError(Exception):
-    """Raised when the point cloud is too sparse to build a surface."""
+    # raised when there aren't enough points to build a mesh
+    pass
 
 
 def build_wound_mesh(source_ply: str, mesh_path: str) -> None:
-    """Build a smooth surface mesh from a point cloud and write it to mesh_path.
-
-    Steps: outlier removal -> normal estimation -> Poisson reconstruction ->
-    trim low-density artifacts. open3d/numpy are imported lazily so the API
-    can start without them.
-    """
+    # turn the point cloud into a smooth mesh and save it
     import numpy as np
     import open3d as o3d
 

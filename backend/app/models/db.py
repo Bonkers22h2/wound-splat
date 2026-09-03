@@ -31,20 +31,19 @@ class Scan(Base):
     output_path = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
 
-    # Progress tracking
+    # progress tracking for the frontend
     current_step = Column(Float, default=0)          # 0-7
     current_step_name = Column(String, nullable=True) # e.g. "Training 3DGS"
-    progress_percent = Column(Float, default=0.0)     # 0-100, used within step 3 (training)
+    progress_percent = Column(Float, default=0.0)     # 0-100
 
-    # Reconstruction quality (replaces hardcoded 85.8%)
-    frames_extracted = Column(Integer, nullable=True)   # total frames from ffmpeg
-    frames_registered = Column(Integer, nullable=True)  # frames COLMAP successfully registered
-    registration_rate = Column(Float, nullable=True)    # frames_registered / frames_extracted * 100
+    # how many frames colmap managed to use
+    frames_extracted = Column(Integer, nullable=True)
+    frames_registered = Column(Integer, nullable=True)
+    registration_rate = Column(Float, nullable=True)
 
-    # Absolute-scale calibration from a known-size reference in the video
-    # (e.g. "card", "coin:us_quarter"; see services/scale_calibration.py).
-    reference_object = Column(String, nullable=True)    # what the patient placed next to the wound
-    scale_cm_per_unit = Column(Float, nullable=True)    # measured scale; None = uncalibrated
+    # real-world scale from a known-size object in the video
+    reference_object = Column(String, nullable=True)
+    scale_cm_per_unit = Column(Float, nullable=True)   # None means uncalibrated
 
     patient = relationship("Patient", back_populates="scans")
     measurements = relationship("Measurement", back_populates="scan", uselist=False)

@@ -1,8 +1,4 @@
-"""Celery variant of the wound pipeline (requires a Redis broker + worker).
-
-The API currently uses the thread-based pipeline in pipeline_direct.py; this
-task is kept for deployments that run a dedicated Celery worker.
-"""
+"""Celery version of the pipeline, kept around for setups that run a Redis worker."""
 import subprocess
 import sys
 from datetime import datetime
@@ -19,6 +15,7 @@ TRAIN_ITERATIONS = 7000
 
 @celery_app.task(bind=True)
 def process_wound_video(self, scan_id: str):
+    # run the whole scan pipeline as a celery task
     db = SessionLocal()
     try:
         scan = db.query(Scan).filter(Scan.id == scan_id).first()

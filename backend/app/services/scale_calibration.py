@@ -1,18 +1,10 @@
-"""Absolute-scale calibration via gaussian-splatting/estimate_scale.py.
-
-The patient places a known-size reference (ISO ID-1 card or a common coin)
-next to the wound during capture; estimate_scale.py detects it across frames
-and prints "SCALE_CM_PER_UNIT: <value>". A wrong scale silently corrupts
-every measurement, so estimate_scale refuses (exit 2) unless detections are
-consistent - in that case measurements fall back to uncalibrated units.
-"""
+"""Works out the real-world scale from a known-size object in the video."""
 import subprocess
 import sys
 
 from app.paths import GAUSSIAN_SPLATTING_DIR
 
-# Must stay in sync with KNOWN_REFERENCES in gaussian-splatting/estimate_scale.py
-# (an out-of-sync entry fails argparse there and simply yields no calibration).
+# reference objects we support (keep in sync with estimate_scale.py)
 REFERENCE_CHOICES = {
     "card",
     "coin:us_penny",
@@ -31,7 +23,7 @@ SCALE_LINE_PREFIX = "SCALE_CM_PER_UNIT:"
 
 
 def estimate_scan_scale(data_dir: str, reference_object: str) -> float | None:
-    """Run reference detection on a scan's capture; None = stay uncalibrated."""
+    # run the scale script and return cm-per-unit, or None if it couldn't measure
     result = subprocess.run([
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/estimate_scale.py",
         "--data_dir", data_dir,

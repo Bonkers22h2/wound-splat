@@ -22,9 +22,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.on_event("startup")
 def add_missing_columns():
-    """Idempotent mini-migration: tables are created once by init_db.py, and
-    create_all never alters existing ones, so columns added to the models
-    since then are bolted on here (SQLite only, which is the default setup)."""
+    # add new columns to the scans table if they aren't there yet (sqlite only)
     from sqlalchemy import text
     from app.database import engine
 
@@ -44,9 +42,7 @@ def add_missing_columns():
 
 @app.on_event("startup")
 def fail_interrupted_scans():
-    """Pipeline runs in a daemon thread that dies when the server stops or
-    reloads, leaving scans stuck at QUEUED/PROCESSING. On boot, mark any such
-    orphaned scans as FAILED so they don't hang in the queue forever."""
+    # mark scans left stuck as queued/processing after a restart as failed
     from app.database import SessionLocal
     from app.models.db import Scan, ScanStatus
 
@@ -67,8 +63,10 @@ def fail_interrupted_scans():
 
 @app.get("/")
 def root():
+    # basic message so you can tell the api is up
     return {"message": "Wound-Splat API is running"}
 
 @app.get("/health")
 def health():
+    # simple health check endpoint
     return {"status": "ok"}

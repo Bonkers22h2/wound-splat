@@ -22,6 +22,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def _get_scan_or_404(db: Session, scan_id: str) -> Scan:
+    # fetch a scan by id or return a 404
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -29,7 +30,7 @@ def _get_scan_or_404(db: Session, scan_id: str) -> Scan:
 
 
 def _latest_iteration_dir_or_404(scan: Scan) -> str:
-    """Resolve the newest training output folder or raise the matching 404."""
+    # find the newest training output folder or return a 404
     if not scan.output_path:
         raise HTTPException(status_code=404, detail="No output available")
     pc_dir = os.path.join(scan.output_path, "point_cloud")
@@ -42,6 +43,7 @@ def _latest_iteration_dir_or_404(scan: Scan) -> str:
 
 
 def _scan_summary(scan: Scan) -> dict:
+    # short scan info used in list views
     return {
         "id": scan.id,
         "video_filename": scan.video_filename,
@@ -55,6 +57,7 @@ def _scan_summary(scan: Scan) -> dict:
 
 
 def _scan_detail(scan: Scan) -> dict:
+    # full scan info used on the detail page
     return {
         **_scan_summary(scan),
         "patient_id": scan.patient_id,
@@ -71,6 +74,7 @@ async def upload_scan(
     reference_object: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    # save the uploaded video and queue it for processing
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -105,11 +109,13 @@ async def upload_scan(
 
 @router.get("/{scan_id}")
 def get_scan(scan_id: str, db: Session = Depends(get_db)):
+    # return details for one scan
     return _scan_detail(_get_scan_or_404(db, scan_id))
 
 
 @router.get("/{scan_id}/measurements")
 def get_measurements(scan_id: str, db: Session = Depends(get_db)):
+    # return the wound measurements once the scan is done
     scan = _get_scan_or_404(db, scan_id)
     if scan.status != ScanStatus.RENDERED:
         return {"status": scan.status, "message": "Scan not yet complete"}
@@ -133,13 +139,7 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{scan_id}/ply")
 def get_ply(scan_id: str, full: bool = False, db: Session = Depends(get_db)):
-    """Serve a point cloud for the points view.
-
-    Default: the color-segmented wound cloud (wound_only.ply). With ?full=true:
-    the complete scene as a plain RGB cloud (points_full.ply, converted once
-    from the raw splat and cached) - no filtering or crop, for inspecting the
-    whole reconstruction. Either falls back to the other if its file is missing.
-    """
+    # serve the point cloud (wound only by default, whole scene with ?full=true)
     scan = _get_scan_or_404(db, scan_id)
     latest = _latest_iteration_dir_or_404(scan)
 
@@ -163,16 +163,11 @@ def get_ply(scan_id: str, full: bool = False, db: Session = Depends(get_db)):
 
 @router.get("/{scan_id}/splat")
 def get_splat(scan_id: str, db: Session = Depends(get_db)):
-    """Serve the full 3DGS point_cloud.ply (with Gaussian fields intact) for the
-    real Gaussian-splat renderer. NOTE: unlike /ply this never falls back to
-    wound_only.ply, because that file is a plain Open3D point cloud (x/y/z + RGB
-    only) and has none of the opacity/scale/rotation/SH data a splat viewer needs.
-    """
+    # serve the gaussian splat ply for the 3d splat viewer
     scan = _get_scan_or_404(db, scan_id)
     latest = _latest_iteration_dir_or_404(scan)
 
-    # Prefer the noise-filtered splat (wound_splat.ply, produced by
-    # segment_splat.py); fall back to the raw full splat if it isn't there yet.
+    # use the filtered splat if it exists, otherwise the raw one
     clean_ply = os.path.join(latest, "wound_splat.ply")
     full_ply = os.path.join(latest, "point_cloud.ply")
     splat_ply = clean_ply if os.path.exists(clean_ply) else full_ply
@@ -186,7 +181,7 @@ def get_splat(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{scan_id}/mesh")
 def get_mesh(scan_id: str, db: Session = Depends(get_db)):
-    """Return a smooth Poisson-reconstructed surface mesh of the wound (cached)."""
+    # serve the wound surface mesh, building it the first time it's asked for
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan or not scan.output_path:
         raise HTTPException(status_code=404, detail="No output available")
@@ -210,12 +205,14 @@ def get_mesh(scan_id: str, db: Session = Depends(get_db)):
 
 @router.get("/patient/{patient_id}")
 def get_patient_scans(patient_id: str, db: Session = Depends(get_db)):
+    # list all scans for a patient
     scans = db.query(Scan).filter(Scan.patient_id == patient_id).all()
     return [_scan_summary(scan) for scan in scans]
 
 
 @router.get("/admin/queue")
 def get_queue(db: Session = Depends(get_db)):
+    # list the 50 most recent scans for the admin queue view
     scans = db.query(Scan).order_by(Scan.created_at.desc()).limit(50).all()
     return [
         {

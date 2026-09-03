@@ -1,17 +1,11 @@
-"""Bridge to the standalone PDF report generator at the backend root.
-
-generate_report.py stays at the backend root because it is documented and
-runnable on its own (see README). This wrapper makes it importable from the
-pipeline regardless of the working directory, and treats failures as
-non-critical so a report problem never fails a whole scan.
-"""
+"""Lets the pipeline call the standalone generate_report.py script."""
 import sys
 
 from app.paths import BACKEND_DIR
 
 
 def generate_scan_report(scan_id: str, **report_kwargs) -> bool:
-    """Generate the PDF report for a scan; return False on failure instead of raising."""
+    # build the pdf report, returning False instead of crashing if it fails
     try:
         backend_dir = str(BACKEND_DIR)
         if backend_dir not in sys.path:

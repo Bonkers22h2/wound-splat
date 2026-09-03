@@ -1,8 +1,6 @@
-"""Parsing of measurement values printed by gaussian-splatting/wound_measure.py."""
+"""Reads the measurement numbers that wound_measure.py prints."""
 
-# Maps the label printed by wound_measure.py to its key in the measurements dict.
-# Order matters: labels are matched first-wins per line ("Max Depth" before any
-# hypothetical shorter label).
+# maps each printed label to the key we store it under
 MEASUREMENT_FIELDS = {
     "Surface Area": "surface_area_cm2",
     "Volume": "volume_cm3",
@@ -13,11 +11,7 @@ MEASUREMENT_FIELDS = {
 
 
 def parse_measurements(output: str) -> dict:
-    """Extract numeric measurements from wound_measure.py stdout.
-
-    Expects lines like "Surface Area: 3.26 cm2". Lines that do not parse
-    cleanly are skipped so a partial result is still returned.
-    """
+    # pull the measurement numbers out of the printed output
     measurements = {}
     for line in output.splitlines():
         if ":" not in line:
@@ -32,7 +26,7 @@ def parse_measurements(output: str) -> dict:
 
 
 def _parse_value(line: str) -> float | None:
-    """Pull the first numeric token after the colon, e.g. "Volume: 0.27 cm3" -> 0.27."""
+    # grab the first number after the colon on a line
     try:
         return float(line.split(":")[1].strip().split()[0])
     except (IndexError, ValueError):
