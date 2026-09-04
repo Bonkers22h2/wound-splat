@@ -91,7 +91,7 @@ def get_recommendation(surface_area, volume, max_depth):
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
                     output_dir, measurements, template_dir=None, registration_rate=None,
-                    render_iteration=15000):
+                    render_iteration=15000, tissue=None):
     # build the full pdf report for a scan and save it to the output folder
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -200,6 +200,39 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
         ('GRID', (0,0), (-1,-1), 0.5, BORDER),
     ]))
     story.append(sec_table)
+
+    # ── TISSUE COMPOSITION ───────────────────────────────────────────
+    if tissue and tissue.get("tissue_composition_pct"):
+        section_title("Wound Tissue Composition")
+        comp = tissue["tissue_composition_pct"]
+        comp_rows = [['Tissue Type', 'Proportion of Wound Bed']]
+        for name in ("granulation", "fibrin", "callus"):
+            if name in comp:
+                comp_rows.append([name.capitalize(), f'{comp[name]:.1f} %'])
+        comp_table = Table(comp_rows, colWidths=[8.75*cm, 8.75*cm])
+        comp_table.setStyle(TableStyle([
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('BACKGROUND', (0,0), (-1,0), TEAL),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTNAME', (1,1), (1,-1), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, LIGHT_GRAY]),
+            ('PADDING', (0,0), (-1,-1), 6),
+            ('GRID', (0,0), (-1,-1), 0.5, BORDER),
+        ]))
+        story.append(comp_table)
+
+        overlay = tissue.get("overlay")
+        if overlay and os.path.exists(overlay):
+            story.append(Spacer(1, 0.2*cm))
+            story.append(Image(overlay, width=6*cm, height=6*cm))
+
+        story.append(Spacer(1, 0.15*cm))
+        story.append(Paragraph(
+            "<font size='7' color='#6b7280'><i>Tissue types are estimated by a 2D "
+            "deep-learning model on a single scan frame. Tissue-class labels are "
+            "provisional and pending clinical validation.</i></font>",
+            ParagraphStyle('tn', fontSize=7, textColor=GRAY)))
 
     # ── RENDER IMAGES ────────────────────────────────────────────────
     renders_base = os.path.join(output_dir, "train")

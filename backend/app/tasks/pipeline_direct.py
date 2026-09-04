@@ -1,5 +1,6 @@
 """Runs a scan from video all the way to wound measurements, one at a time."""
 import glob
+import json
 import os
 import queue
 import re
@@ -11,13 +12,21 @@ from datetime import datetime
 
 from app.database import SessionLocal
 from app.models.db import Measurement, Scan, ScanStatus
-from app.paths import GAUSSIAN_SPLATTING_DIR
+from app.paths import DATABASE_PATH, GAUSSIAN_SPLATTING_DIR, PROJECT_ROOT
 from app.services.measurements import parse_measurements
 from app.services.scale_calibration import estimate_scan_scale
 from app.services.report_service import generate_scan_report
 from app.services.scan_outputs import count_images, find_latest_iteration_dir
 
 TRAIN_ITERATIONS = 30000
+
+# Tissue segmentation (2D) runs in its own venv so its torch/deps never mix with
+# the backend's. Linux pods use bin/python; Windows uses Scripts/python.exe.
+TISSUE_DIR = PROJECT_ROOT / "tissue"
+_tissue_venv = PROJECT_ROOT / "tissue-venv"
+TISSUE_PYTHON = _tissue_venv / "Scripts" / "python.exe"
+if not TISSUE_PYTHON.exists():
+    TISSUE_PYTHON = _tissue_venv / "bin" / "python"
 
 # how much to shrink training images (2 = half size, less vram; 1 = full size)
 TRAIN_RESOLUTION = int(os.getenv("TRAIN_RESOLUTION", "2"))
@@ -32,7 +41,8 @@ STEP_NAMES = {
     4: "Rendering preview images",
     5: "Segmenting wound tissue",
     6: "Measuring wound dimensions",
-    7: "Generating PDF report",
+    7: "Analyzing wound tissue types",
+    8: "Generating PDF report",
 }
 
 # finds the percent in training output like "45%|####  | 3150/7000"
@@ -168,7 +178,12 @@ def _pipeline_task(scan_id: str) -> None:
         measurements = _measure_wound(wound_only_path, scale)
         update_progress(scan_id, 6, 100)
 
+        # step 7: classify wound tissue types on a real frame (non-critical)
         update_progress(scan_id, 7, 0)
+        tissue = _segment_tissue(scan_id, input_dir, output_dir)
+        update_progress(scan_id, 7, 100)
+
+        update_progress(scan_id, 8, 0)
         generate_scan_report(
             scan_id=scan_id,
             patient_name=patient.name,
@@ -177,10 +192,11 @@ def _pipeline_task(scan_id: str) -> None:
             output_dir=output_dir,
             measurements={**measurements, "point_count": "N/A"},
             registration_rate=scan.registration_rate,
+            tissue=tissue,
         )
-        update_progress(scan_id, 7, 100)
+        update_progress(scan_id, 8, 100)
 
-        _save_measurements(db, scan_id, measurements)
+        _save_measurements(db, scan_id, measurements, tissue)
         scan.status = ScanStatus.RENDERED
         scan.output_path = output_dir
         scan.completed_at = datetime.utcnow()
@@ -365,8 +381,57 @@ def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
     return parse_measurements(result.stdout)
 
 
-def _save_measurements(db, scan_id: str, measurements: dict) -> None:
+def _segment_tissue(scan_id: str, input_dir: str, output_dir: str) -> dict | None:
+    # step 7: run the 2D tissue models on the extracted frames. Non-critical:
+    # returns None (and the scan continues) if the venv/models aren't set up.
+    if not TISSUE_PYTHON.exists():
+        print(f"[{scan_id}] Tissue step skipped: {TISSUE_PYTHON} not found")
+        return None
+    try:
+        result = subprocess.run(
+            [str(TISSUE_PYTHON), str(TISSUE_DIR / "tissue_segment.py"),
+             "--frames_dir", input_dir, "--outdir", output_dir],
+            capture_output=True, text=True, cwd=str(TISSUE_DIR))
+        if result.returncode != 0:
+            print(f"[{scan_id}] Tissue step failed (non-critical): {result.stderr[-1000:]}")
+            return None
+        # the JSON summary is the last non-empty stdout line
+        line = [ln for ln in result.stdout.splitlines() if ln.strip()][-1]
+        data = json.loads(line)
+        if not data.get("ok"):
+            return None
+        print(f"[{scan_id}] Tissue composition: {data.get('tissue_composition_pct')}")
+        return data
+    except Exception as exc:
+        print(f"[{scan_id}] Tissue step error (non-critical): {exc}")
+        return None
+
+
+def _ensure_measurement_columns() -> None:
+    # add the tissue columns to an existing measurements table if missing
+    # (SQLAlchemy create_all won't ALTER a table that already exists).
+    cols = {
+        "tissue_granulation_pct": "REAL",
+        "tissue_fibrin_pct": "REAL",
+        "tissue_callus_pct": "REAL",
+        "tissue_best_frame": "TEXT",
+        "wound_coverage_pct": "REAL",
+    }
+    try:
+        con = sqlite3.connect(str(DATABASE_PATH))
+        existing = {r[1] for r in con.execute("PRAGMA table_info(measurements)")}
+        for name, sqltype in cols.items():
+            if name not in existing:
+                con.execute(f"ALTER TABLE measurements ADD COLUMN {name} {sqltype}")
+        con.commit(); con.close()
+    except sqlite3.Error as exc:
+        print(f"Could not ensure tissue columns: {exc}")
+
+
+def _save_measurements(db, scan_id: str, measurements: dict, tissue: dict | None = None) -> None:
     # save the measurement values to the database
+    _ensure_measurement_columns()
+    comp = (tissue or {}).get("tissue_composition_pct", {})
     db.add(Measurement(
         scan_id=scan_id,
         surface_area_cm2=measurements.get("surface_area_cm2"),
@@ -374,4 +439,9 @@ def _save_measurements(db, scan_id: str, measurements: dict) -> None:
         max_depth_mm=measurements.get("max_depth_mm"),
         width_cm=measurements.get("width_cm"),
         height_cm=measurements.get("height_cm"),
+        tissue_granulation_pct=comp.get("granulation"),
+        tissue_fibrin_pct=comp.get("fibrin"),
+        tissue_callus_pct=comp.get("callus"),
+        tissue_best_frame=(tissue or {}).get("best_frame"),
+        wound_coverage_pct=(tissue or {}).get("wound_coverage_pct"),
     ))

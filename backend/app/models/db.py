@@ -57,5 +57,13 @@ class Measurement(Base):
     max_depth_mm = Column(Float, nullable=True)
     width_cm = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
+
+    # wound tissue composition (2D model on a scan frame); names provisional
+    tissue_granulation_pct = Column(Float, nullable=True)
+    tissue_fibrin_pct = Column(Float, nullable=True)
+    tissue_callus_pct = Column(Float, nullable=True)
+    tissue_best_frame = Column(String, nullable=True)
+    wound_coverage_pct = Column(Float, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     scan = relationship("Scan", back_populates="measurements")
