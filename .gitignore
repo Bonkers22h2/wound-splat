@@ -51,3 +51,5 @@ gaussian-splatting/SIBR_viewers/
 gaussian-splatting/submodules/diff-gaussian-rasterization/third_party/ 
 gaussian-splatting/submodules/fused-ssim/ 
 wound_splat_documentation.docx
+# Tissue feature training env
+tissue-venv/
