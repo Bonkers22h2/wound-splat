@@ -1,0 +1,40 @@
+{
+  "num_classes": 4,
+  "class_index_to_provisional_name": {
+    "0": "background",
+    "1": "granulation?",
+    "2": "fibrin?",
+    "3": "callus?"
+  },
+  "normalization": {
+    "mean": [
+      0.6701,
+      0.5076,
+      0.4445
+    ],
+    "std": [
+      0.2444,
+      0.2076,
+      0.1941
+    ]
+  },
+  "train_pixel_counts": [
+    1498377,
+    52037,
+    103758,
+    236171
+  ],
+  "train_pixel_freq": [
+    0.79265,
+    0.02753,
+    0.05489,
+    0.12494
+  ],
+  "class_weights": [
+    0.0791,
+    2.2771,
+    1.142,
+    0.5017
+  ],
+  "note": "names provisional pending clinician confirmation; see memory tissue-color-name-binding"
+}
