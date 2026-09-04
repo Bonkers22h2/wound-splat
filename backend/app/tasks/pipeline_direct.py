@@ -178,9 +178,10 @@ def _pipeline_task(scan_id: str) -> None:
         measurements = _measure_wound(wound_only_path, scale)
         update_progress(scan_id, 6, 100)
 
-        # step 7: classify wound tissue types on a real frame (non-critical)
+        # step 7: classify wound tissue types, in 2D and (if possible) in 3D
         update_progress(scan_id, 7, 0)
-        tissue = _segment_tissue(scan_id, input_dir, output_dir)
+        tissue = _segment_tissue(scan_id, input_dir, output_dir,
+                                 data_dir, wound_only_path, scale)
         update_progress(scan_id, 7, 100)
 
         update_progress(scan_id, 8, 0)
@@ -381,30 +382,52 @@ def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
     return parse_measurements(result.stdout)
 
 
-def _segment_tissue(scan_id: str, input_dir: str, output_dir: str) -> dict | None:
-    # step 7: run the 2D tissue models on the extracted frames. Non-critical:
-    # returns None (and the scan continues) if the venv/models aren't set up.
+def _run_tissue_script(scan_id: str, script: str, extra_args: list[str]) -> dict | None:
+    # run one of the tissue scripts in its own venv and parse its JSON summary
+    try:
+        result = subprocess.run(
+            [str(TISSUE_PYTHON), str(TISSUE_DIR / script), *extra_args],
+            capture_output=True, text=True, cwd=str(TISSUE_DIR))
+        if result.returncode != 0:
+            print(f"[{scan_id}] {script} failed (non-critical): {result.stderr[-1000:]}")
+            return None
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        if not lines:
+            return None
+        data = json.loads(lines[-1])          # JSON summary is the last line
+        return data if data.get("ok") else None
+    except Exception as exc:
+        print(f"[{scan_id}] {script} error (non-critical): {exc}")
+        return None
+
+
+def _segment_tissue(scan_id: str, input_dir: str, output_dir: str,
+                    data_dir: str, wound_only_path: str,
+                    scale: float | None) -> dict | None:
+    # step 7: tissue types in 2D (composition + overlay for the report), then
+    # back-projected onto the 3D cloud for real tissue AREAS when the scan is
+    # calibrated. Non-critical: the scan still completes if either part fails.
     if not TISSUE_PYTHON.exists():
         print(f"[{scan_id}] Tissue step skipped: {TISSUE_PYTHON} not found")
         return None
-    try:
-        result = subprocess.run(
-            [str(TISSUE_PYTHON), str(TISSUE_DIR / "tissue_segment.py"),
-             "--frames_dir", input_dir, "--outdir", output_dir],
-            capture_output=True, text=True, cwd=str(TISSUE_DIR))
-        if result.returncode != 0:
-            print(f"[{scan_id}] Tissue step failed (non-critical): {result.stderr[-1000:]}")
-            return None
-        # the JSON summary is the last non-empty stdout line
-        line = [ln for ln in result.stdout.splitlines() if ln.strip()][-1]
-        data = json.loads(line)
-        if not data.get("ok"):
-            return None
-        print(f"[{scan_id}] Tissue composition: {data.get('tissue_composition_pct')}")
-        return data
-    except Exception as exc:
-        print(f"[{scan_id}] Tissue step error (non-critical): {exc}")
-        return None
+
+    tissue = _run_tissue_script(scan_id, "tissue_segment.py",
+                                ["--frames_dir", input_dir, "--outdir", output_dir])
+    if tissue:
+        print(f"[{scan_id}] Tissue composition (2D): {tissue.get('tissue_composition_pct')}")
+
+    # 3D areas need the COLMAP poses and the segmented wound cloud
+    if os.path.exists(wound_only_path) and os.path.isdir(os.path.join(data_dir, "sparse")):
+        proj = _run_tissue_script(scan_id, "tissue_project.py", [
+            "--scan_dir", data_dir,
+            "--ply", wound_only_path,
+            "--scale", str(scale if scale else 1.0),
+            "--outdir", output_dir,
+        ])
+        if proj:
+            print(f"[{scan_id}] Tissue areas (3D): {proj.get('tissue_area_cm2')}")
+            tissue = {**(tissue or {}), **proj, "has_3d": True}
+    return tissue
 
 
 def _ensure_measurement_columns() -> None:
@@ -416,6 +439,9 @@ def _ensure_measurement_columns() -> None:
         "tissue_callus_pct": "REAL",
         "tissue_best_frame": "TEXT",
         "wound_coverage_pct": "REAL",
+        "tissue_granulation_cm2": "REAL",
+        "tissue_fibrin_cm2": "REAL",
+        "tissue_callus_cm2": "REAL",
     }
     try:
         con = sqlite3.connect(str(DATABASE_PATH))
@@ -432,6 +458,7 @@ def _save_measurements(db, scan_id: str, measurements: dict, tissue: dict | None
     # save the measurement values to the database
     _ensure_measurement_columns()
     comp = (tissue or {}).get("tissue_composition_pct", {})
+    area = (tissue or {}).get("tissue_area_cm2", {})
     db.add(Measurement(
         scan_id=scan_id,
         surface_area_cm2=measurements.get("surface_area_cm2"),
@@ -444,4 +471,7 @@ def _save_measurements(db, scan_id: str, measurements: dict, tissue: dict | None
         tissue_callus_pct=comp.get("callus"),
         tissue_best_frame=(tissue or {}).get("best_frame"),
         wound_coverage_pct=(tissue or {}).get("wound_coverage_pct"),
+        tissue_granulation_cm2=area.get("granulation"),
+        tissue_fibrin_cm2=area.get("fibrin"),
+        tissue_callus_cm2=area.get("callus"),
     ))

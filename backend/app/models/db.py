@@ -65,5 +65,10 @@ class Measurement(Base):
     tissue_best_frame = Column(String, nullable=True)
     wound_coverage_pct = Column(Float, nullable=True)
 
+    # tissue areas in cm2, back-projected onto the 3D cloud (calibrated scans)
+    tissue_granulation_cm2 = Column(Float, nullable=True)
+    tissue_fibrin_cm2 = Column(Float, nullable=True)
+    tissue_callus_cm2 = Column(Float, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     scan = relationship("Scan", back_populates="measurements")
