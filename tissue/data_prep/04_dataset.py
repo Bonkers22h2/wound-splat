@@ -28,7 +28,7 @@ def colorize(mask):
 
 # ---- augmentation recipe --------------------------------------------------
 # Geometry is free to be aggressive (tiny dataset). COLOR is kept GENTLE on
-# purpose: tissue hue is the label (red=granulation etc.), so heavy hue/sat
+# purpose: tissue hue is the label (red=fibrin etc.), so heavy hue/sat
 # shifts would corrupt the signal.
 # Use the Original variant (clean single-channel index masks) and resize to a
 # fixed SIZE here — masks use NEAREST so class ids are never interpolated.

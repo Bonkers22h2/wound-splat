@@ -250,8 +250,9 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
             "frame. Areas in cm² require a calibrated scan (reference object)."
         )
         story.append(Paragraph(
-            f"<font size='7' color='#6b7280'><i>{method} Tissue-class labels are "
-            "provisional and pending clinical validation.</i></font>",
+            f"<font size='7' color='#6b7280'><i>{method} Tissue-class definitions follow "
+            "the DFUTissue dataset (UWM). Results are research output and are not a "
+            "clinical diagnosis.</i></font>",
             ParagraphStyle('tn', fontSize=7, textColor=GRAY)))
 
     # ── RENDER IMAGES ────────────────────────────────────────────────

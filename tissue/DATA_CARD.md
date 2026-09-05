@@ -18,17 +18,19 @@ no redistribution**. Raw data is gitignored. See `docs/permissions/` and `CITATI
     splits cannot be fully verified. Using the authors' splits for comparability.
 
 ## Classes (4-class segmentation)
-| Index | Mask color | Provisional name | Train pixel freq | Loss weight |
-|------:|-----------|------------------|-----------------:|------------:|
-| 0 | black | background        | 79.3% | 0.08 |
-| 1 | red   | granulation *(?)* |  2.8% | 2.28 |
-| 2 | green | fibrin *(?)*      |  5.5% | 1.14 |
-| 3 | blue  | callus *(?)*      | 12.5% | 0.50 |
+| Index | Mask color | Name | Train pixel freq | Loss weight |
+|------:|-----------|-------------|-----------------:|------------:|
+| 0 | black | background   | 79.3% | 0.08 |
+| 1 | red   | fibrin       |  2.8% | 2.28 |
+| 2 | green | granulation  |  5.5% | 1.14 |
+| 3 | blue  | callus       | 12.5% | 0.50 |
 
-⚠️ **Name binding is provisional** — inferred from overlay QA, not documented by the
-dataset. **To be confirmed with adviser/clinician** (esp. red vs green = granulation vs
-fibrin; blue=callus is fairly confident). Training is unaffected (model learns indices);
-only report labels depend on this. See `tissue/outputs/dfutissue_overlays.png`.
+✅ **Name binding is authoritative** — taken from the dataset's own
+`Labeled/Original/Palette/palette_colorCode.txt`, which states verbatim:
+`Red - Fibrin`, `Green - Granulation`, `Blue - Callus`. An earlier revision of this
+card guessed red=granulation/green=fibrin from overlay QA; that guess was **backwards**
+and has been corrected. Training was unaffected (the model learns indices, not names) —
+only report labels changed. See `tissue/outputs/dfutissue_overlays.png`.
 
 Classes dropped from scope: necrotic, eschar, neodermis, tendon, dressing (absent/too
 rare in the Original masks) — and "infection" is a clinical flag, not a tissue class.

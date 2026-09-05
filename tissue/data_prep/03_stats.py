@@ -59,14 +59,14 @@ weights = (inv / inv.sum() * NCLASS)  # mean ~1
 
 stats = {
     "num_classes": NCLASS,
-    "class_index_to_provisional_name": {
-        "0": "background", "1": "granulation?", "2": "fibrin?", "3": "callus?"
+    "class_index_to_name": {
+        "0": "background", "1": "fibrin", "2": "granulation", "3": "callus"
     },
     "normalization": {"mean": mean.round(4).tolist(), "std": std.round(4).tolist()},
     "train_pixel_counts": pix.tolist(),
     "train_pixel_freq": freq.round(5).tolist(),
     "class_weights": weights.round(4).tolist(),
-    "note": "names provisional pending clinician confirmation; see memory tissue-color-name-binding",
+    "note": "names per DFUTissue Palette/palette_colorCode.txt (Red-Fibrin, Green-Granulation, Blue-Callus)",
 }
 with open(os.path.join(OUT_CFG, "stats.json"), "w") as f:
     json.dump(stats, f, indent=2)

@@ -17,7 +17,7 @@ spec = importlib.util.spec_from_file_location(
 ds = importlib.util.module_from_spec(spec); spec.loader.exec_module(ds)
 CKPT = os.path.join(ROOT, "tissue", "checkpoints", "tissue_best.pt")
 OUT = os.path.join(ROOT, "tissue", "outputs"); os.makedirs(OUT, exist_ok=True)
-NAMES = ["background", "granulation?", "fibrin?", "callus?"]
+NAMES = ["background", "fibrin", "granulation", "callus"]
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 ck = torch.load(CKPT, map_location=device)

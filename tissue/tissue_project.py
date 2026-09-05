@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(HERE)
 GS_DIR = os.path.join(PROJECT_ROOT, "gaussian-splatting")
 SIZE = 256
-TISSUE_NAMES = {1: "granulation", 2: "fibrin", 3: "callus"}   # provisional
+TISSUE_NAMES = {1: "fibrin", 2: "granulation", 3: "callus"}   # dataset palette_colorCode.txt
 PALETTE = np.array([[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
 
 # A point is occluded if it sits this much deeper than the nearest surface
@@ -220,7 +220,7 @@ def main():
         "unclassified_cells": unclassified,
         "footprint_cells": total_cells,
         "tissue_ply": out_ply,
-        "note": "tissue names provisional; areas share wound_measure's plane/footprint",
+        "note": "areas share wound_measure's plane/footprint",
     }))
 
 

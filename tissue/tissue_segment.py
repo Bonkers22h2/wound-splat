@@ -2,7 +2,7 @@
 
 Chains the two trained models on real RGB frames:
   1. wound-finding model  -> picks the frame that best shows a wound
-  2. tissue model         -> classifies tissue (granulation/fibrin/callus)
+  2. tissue model         -> classifies tissue (fibrin/granulation/callus)
 
 Prints a JSON summary to stdout (for the backend to parse) and saves an overlay
 image. Runs in tissue-venv (needs torch + segmentation-models-pytorch).
@@ -25,8 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SIZE = 256
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406]); IMAGENET_STD = np.array([0.229, 0.224, 0.225])
 PALETTE = np.array([[0, 0, 0], [255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
-# provisional names — pending clinician confirmation (see DATA_CARD.md)
-TISSUE_NAMES = {1: "granulation", 2: "fibrin", 3: "callus"}
+# per the dataset's own palette_colorCode.txt: red=Fibrin, green=Granulation, blue=Callus
+TISSUE_NAMES = {1: "fibrin", 2: "granulation", 3: "callus"}
 
 
 def _load_tissue_norm():
@@ -119,7 +119,7 @@ def main():
         "tissue_composition_pct": comp,
         "tissue_pixels": total,
         "overlay": overlay_path,
-        "note": "tissue names provisional; pending clinician confirmation",
+        "note": "tissue names per DFUTissue palette_colorCode.txt",
     }
     print(json.dumps(result))
 

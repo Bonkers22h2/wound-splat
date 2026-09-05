@@ -21,12 +21,12 @@ DFU = os.path.join(ROOT, "data", "datasets", "dfutissue", "Labeled", "Original")
 OUT = os.path.join(ROOT, "tissue", "outputs")
 os.makedirs(OUT, exist_ok=True)
 
-# index -> (color, provisional name to CONFIRM)
+# index -> (color, name); per the dataset's Palette/palette_colorCode.txt
 CMAP = {
     0: ((0, 0, 0), "background"),
-    1: ((255, 0, 0), "tissue-1 (red)"),
-    2: ((0, 255, 0), "tissue-2 (green)"),
-    3: ((0, 0, 255), "tissue-3 (blue)"),
+    1: ((255, 0, 0), "fibrin (red)"),
+    2: ((0, 255, 0), "granulation (green)"),
+    3: ((0, 0, 255), "callus (blue)"),
 }
 
 def colorize(mask):

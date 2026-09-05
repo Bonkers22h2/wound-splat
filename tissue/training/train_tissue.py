@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location(
 ds = importlib.util.module_from_spec(spec); spec.loader.exec_module(ds)
 CFG = json.load(open(os.path.join(ROOT, "tissue", "configs", "stats.json")))
 CKPT_DIR = os.path.join(ROOT, "tissue", "checkpoints"); os.makedirs(CKPT_DIR, exist_ok=True)
-NAMES = ["background", "granulation?", "fibrin?", "callus?"]  # provisional
+NAMES = ["background", "fibrin", "granulation", "callus"]  # dataset palette_colorCode.txt
 
 
 @torch.no_grad()

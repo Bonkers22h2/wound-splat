@@ -58,7 +58,7 @@ class Measurement(Base):
     width_cm = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
 
-    # wound tissue composition (2D model on a scan frame); names provisional
+    # wound tissue composition (2D model on a scan frame)
     tissue_granulation_pct = Column(Float, nullable=True)
     tissue_fibrin_pct = Column(Float, nullable=True)
     tissue_callus_pct = Column(Float, nullable=True)
