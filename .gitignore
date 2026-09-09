@@ -42,6 +42,27 @@ Thumbs.db
 # Logs
 *.log
 
+# --- Wound tissue segmentation (DFUTissue dataset) ---
+# The DFUTissue data was granted for nonprofit academic use with NO
+# REDISTRIBUTION (Prof. Zeyun Yu, 2026-09-04 — see docs/permissions/).
+# THIS REPOSITORY IS PUBLIC, so the rule below denies everything under tissue/
+# by default and allows only source code and notes back in. A new image, mask
+# or checkpoint therefore cannot be committed by accident.
+tissue/**
+!tissue/**/
+!tissue/**/*.py
+!tissue/**/*.md
+!tissue/configs/*.json
+
+# A clone of the upstream dataset repo, wherever it lands
+DFUTissueSegNet/
+
+# Trained weights and the training virtualenv — never commit either
+tissue-venv/
+*.pt
+*.pth
+*.ckpt
+
 # Misc
 filelist.txt
 wound_salve.mp4
