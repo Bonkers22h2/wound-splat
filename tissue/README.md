@@ -63,6 +63,25 @@ From the dataset's own `Original/Palette/palette_colorCode.txt`, verbatim:
 and had fibrin and granulation the wrong way round — clinically the opposite
 reading, since granulation is healthy tissue and fibrin is not.
 
+### Training-split statistics
+
+Computed by `tissue-venv/Scripts/python.exe -m tissue.compute_stats`, from the
+**78 training images only** — taking them from validation or test would leak
+information about those images into training. Written to `configs/stats.json`.
+
+Normalisation mean `[0.6701, 0.5076, 0.4445]`, std `[0.2437, 0.2068, 0.1932]`.
+
+| Class | Pixels | Share | Loss weight | Appears in |
+|---|---:|---:|---:|---:|
+| background | 4,093,506 | 80.1% | 0.076 | 78/78 |
+| fibrin | 147,026 | 2.9% | 2.124 | **57/78** |
+| granulation | 239,029 | 4.7% | 1.306 | 68/78 |
+| callus | 632,247 | 12.4% | 0.494 | 60/78 |
+
+Weights are inverse frequency rescaled to average 1, so fibrin counts about 28
+times more per pixel than background. Without this a model could score well by
+predicting "background" almost everywhere.
+
 ### Two properties that affect the code
 
 **Images are small and every one is a different size** — from 67×67 to 266×266

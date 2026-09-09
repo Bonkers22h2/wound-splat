@@ -1,0 +1,48 @@
+{
+  "num_classes": 4,
+  "image_size": 256,
+  "class_index_to_name": {
+    "0": "background",
+    "1": "fibrin",
+    "2": "granulation",
+    "3": "callus"
+  },
+  "source": "DFUTissue Original variant, training split only (78 images)",
+  "palette_note": "names per the dataset's own Original/Palette/palette_colorCode.txt: Red - Fibrin, Green - Granulation, Blue - Callus",
+  "normalization": {
+    "mean": [
+      0.6701,
+      0.5076,
+      0.4445
+    ],
+    "std": [
+      0.2437,
+      0.2068,
+      0.1932
+    ]
+  },
+  "train_pixel_counts": [
+    4093506,
+    147026,
+    239029,
+    632247
+  ],
+  "train_pixel_freq": [
+    0.80079,
+    0.02876,
+    0.04676,
+    0.12368
+  ],
+  "train_images_containing_class": [
+    78,
+    57,
+    68,
+    60
+  ],
+  "class_weights": [
+    0.0763,
+    2.1236,
+    1.3062,
+    0.4938
+  ]
+}
