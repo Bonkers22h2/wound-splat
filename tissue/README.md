@@ -142,6 +142,35 @@ is direct evidence, on our own data, for requiring a user-drawn box.
 | Box around the clay | 13.7% | 3.6% / 95.4% / 1.0% |
 | Box on the red centre | 7.3% | 0.0% / 79.4% / 20.6% |
 
+#### On 14 real wound photos
+
+Also run against 14 real wound photographs (`C:\Users\bonkc\Documents\dataset`),
+none of which are from DFUTissue.
+
+**It localises the wound in all 14.** In no case did it label background instead
+of the wound, and in one photo containing two separate ulcers it found both.
+
+**The tissue assignment is clinically sensible, not just colour matching.** On
+wounds with a yellow-cream centre ringed by red tissue, it labels the yellow as
+fibrin and the red as granulation — which is correct, fibrin being yellow slough
+and granulation being red healing tissue. On classic foot ulcers it draws a ring
+of callus around the wound, matching the thickened pale skin that surrounds them.
+
+**Failure mode: callus is over-predicted onto healthy skin.** On the wider foot
+photographs, callus reached 85–94% of everything called wound, spreading well
+past the real callus ring. The cause is the same as the coin: every training
+image is cropped tight to a wound, so the model has never seen a large expanse
+of ordinary skin and has no class to assign it.
+
+**Consequence for the application: the box must be drawn tightly.** Within this
+same set, the tight close-ups produced a balanced mix of all three tissues while
+the wide shots produced ~90% callus — same model, same day, framing alone. This
+is worth stating directly: the percentages depend on region selection, which is
+why a person selects it rather than the model guessing.
+
+These photographs carry no expert labels, so this shows the output is clinically
+plausible, not that it is measurably correct.
+
 **Two honest limitations.**
 
 1. Within the box it marks only ~14% of pixels as wound, leaving much of the
