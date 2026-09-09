@@ -1,0 +1,364 @@
+{
+  "tag": "official_split",
+  "protocol": "authors' 78/16/16 split; final-epoch weights; no early stopping",
+  "epochs": 80,
+  "batch_size": 8,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.01,
+  "seed": 0,
+  "minutes": 2.8,
+  "class_names": [
+    "background",
+    "fibrin",
+    "granulation",
+    "callus"
+  ],
+  "test": {
+    "dice_per_class": [
+      0.9344,
+      0.6156,
+      0.9109,
+      0.733
+    ],
+    "iou_per_class": [
+      0.8769,
+      0.4447,
+      0.8363,
+      0.5785
+    ],
+    "mean_tissue_dice": 0.7531
+  },
+  "val": {
+    "mean_tissue_dice": 0.6196
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 2.3020032246907554
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.1046212249332004
+    },
+    {
+      "epoch": 3,
+      "train_loss": 1.9463600979910956
+    },
+    {
+      "epoch": 4,
+      "train_loss": 1.8307980828815036
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.7584547334247165
+    },
+    {
+      "epoch": 6,
+      "train_loss": 1.6277081701490614
+    },
+    {
+      "epoch": 7,
+      "train_loss": 1.537540250354343
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.4919124179416232
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.4301848279105291
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.3539157178666856,
+      "val_mean_tissue_dice": 0.3867934702195362
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.3126415808995564
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.2592686812082927
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.2300024562411838
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.227963924407959
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.1451985438664753
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.1152157651053534
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.0687978665033977
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.0757905840873718
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.0517355865902371
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.0128414498435125,
+      "val_mean_tissue_dice": 0.5418418877814147
+    },
+    {
+      "epoch": 21,
+      "train_loss": 0.9773797790209452
+    },
+    {
+      "epoch": 22,
+      "train_loss": 0.972785214583079
+    },
+    {
+      "epoch": 23,
+      "train_loss": 0.9353473318947686
+    },
+    {
+      "epoch": 24,
+      "train_loss": 0.9803725481033325
+    },
+    {
+      "epoch": 25,
+      "train_loss": 0.924500306447347
+    },
+    {
+      "epoch": 26,
+      "train_loss": 0.8798157771428426
+    },
+    {
+      "epoch": 27,
+      "train_loss": 0.8484799199634128
+    },
+    {
+      "epoch": 28,
+      "train_loss": 0.8689939909511142
+    },
+    {
+      "epoch": 29,
+      "train_loss": 0.8102406528260973
+    },
+    {
+      "epoch": 30,
+      "train_loss": 0.8428816927803887,
+      "val_mean_tissue_dice": 0.5689869002551268
+    },
+    {
+      "epoch": 31,
+      "train_loss": 0.8333014249801636
+    },
+    {
+      "epoch": 32,
+      "train_loss": 0.8037077718310885
+    },
+    {
+      "epoch": 33,
+      "train_loss": 0.7717137270503573
+    },
+    {
+      "epoch": 34,
+      "train_loss": 0.7784066332711114
+    },
+    {
+      "epoch": 35,
+      "train_loss": 0.7460776501231723
+    },
+    {
+      "epoch": 36,
+      "train_loss": 0.7468185292349921
+    },
+    {
+      "epoch": 37,
+      "train_loss": 0.7306971549987793
+    },
+    {
+      "epoch": 38,
+      "train_loss": 0.7155802382363213
+    },
+    {
+      "epoch": 39,
+      "train_loss": 0.7129959927664863
+    },
+    {
+      "epoch": 40,
+      "train_loss": 0.714160872830285,
+      "val_mean_tissue_dice": 0.601046434788585
+    },
+    {
+      "epoch": 41,
+      "train_loss": 0.6645380523469713
+    },
+    {
+      "epoch": 42,
+      "train_loss": 0.671779539850023
+    },
+    {
+      "epoch": 43,
+      "train_loss": 0.6406044032838609
+    },
+    {
+      "epoch": 44,
+      "train_loss": 0.6318495074907938
+    },
+    {
+      "epoch": 45,
+      "train_loss": 0.6204987168312073
+    },
+    {
+      "epoch": 46,
+      "train_loss": 0.6023221810658773
+    },
+    {
+      "epoch": 47,
+      "train_loss": 0.6160823967721727
+    },
+    {
+      "epoch": 48,
+      "train_loss": 0.6046480470233493
+    },
+    {
+      "epoch": 49,
+      "train_loss": 0.6123082505332099
+    },
+    {
+      "epoch": 50,
+      "train_loss": 0.6234741343392266,
+      "val_mean_tissue_dice": 0.606952133820764
+    },
+    {
+      "epoch": 51,
+      "train_loss": 0.595981154176924
+    },
+    {
+      "epoch": 52,
+      "train_loss": 0.612470633453793
+    },
+    {
+      "epoch": 53,
+      "train_loss": 0.5904179314772288
+    },
+    {
+      "epoch": 54,
+      "train_loss": 0.5888778799109988
+    },
+    {
+      "epoch": 55,
+      "train_loss": 0.5786809722582499
+    },
+    {
+      "epoch": 56,
+      "train_loss": 0.5661458704206679
+    },
+    {
+      "epoch": 57,
+      "train_loss": 0.5765769481658936
+    },
+    {
+      "epoch": 58,
+      "train_loss": 0.5622080365816752
+    },
+    {
+      "epoch": 59,
+      "train_loss": 0.6101446085506015
+    },
+    {
+      "epoch": 60,
+      "train_loss": 0.5647662182648977,
+      "val_mean_tissue_dice": 0.6277018122620887
+    },
+    {
+      "epoch": 61,
+      "train_loss": 0.5478304492102729
+    },
+    {
+      "epoch": 62,
+      "train_loss": 0.5583679013782077
+    },
+    {
+      "epoch": 63,
+      "train_loss": 0.5874079101615481
+    },
+    {
+      "epoch": 64,
+      "train_loss": 0.5622150401274363
+    },
+    {
+      "epoch": 65,
+      "train_loss": 0.5541635817951627
+    },
+    {
+      "epoch": 66,
+      "train_loss": 0.5208137565188937
+    },
+    {
+      "epoch": 67,
+      "train_loss": 0.54017706712087
+    },
+    {
+      "epoch": 68,
+      "train_loss": 0.570292505953047
+    },
+    {
+      "epoch": 69,
+      "train_loss": 0.5229651663038466
+    },
+    {
+      "epoch": 70,
+      "train_loss": 0.5410329037242465,
+      "val_mean_tissue_dice": 0.6194786533156128
+    },
+    {
+      "epoch": 71,
+      "train_loss": 0.5262728896405962
+    },
+    {
+      "epoch": 72,
+      "train_loss": 0.5606151753001742
+    },
+    {
+      "epoch": 73,
+      "train_loss": 0.532304522063997
+    },
+    {
+      "epoch": 74,
+      "train_loss": 0.5435459713141123
+    },
+    {
+      "epoch": 75,
+      "train_loss": 0.5468103422058953
+    },
+    {
+      "epoch": 76,
+      "train_loss": 0.5300281445185343
+    },
+    {
+      "epoch": 77,
+      "train_loss": 0.5200685726271735
+    },
+    {
+      "epoch": 78,
+      "train_loss": 0.5240957571400536
+    },
+    {
+      "epoch": 79,
+      "train_loss": 0.5534079869588217
+    },
+    {
+      "epoch": 80,
+      "train_loss": 0.5212577415837182,
+      "val_mean_tissue_dice": 0.6195618491224161
+    }
+  ]
+}
