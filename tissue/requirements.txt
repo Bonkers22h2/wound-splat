@@ -31,4 +31,4 @@ pillow==12.2.0
 pytest==9.1.1
 # Used to read the generated PDF back and confirm the tissue section is
 # really in it, rather than trusting that the file grew.
-pypdf==6.6.1
+pypdf==6.18.0
