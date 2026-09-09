@@ -41,6 +41,24 @@ export const scanApi = {
   },
 }
 
+export const tissueApi = {
+  // The saved result for a scan, or null when it has not been analysed yet.
+  get: async (scanId) => {
+    const res = await fetch(`${API_BASE}/scans/${scanId}/tissue`)
+    return res.ok ? res.json() : null
+  },
+
+  // box is { left, top, right, bottom } in pixels of the *original* frame,
+  // not of the scaled <img> shown on screen. Returns the raw Response so
+  // callers can surface the backend's message on 400/409/500.
+  analyse: (scanId, box) =>
+    fetch(`${API_BASE}/scans/${scanId}/tissue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(box),
+    }),
+}
+
 // URL builders for assets referenced outside fetch (three.js loaders,
 // <img> tags, and download links).
 export const scanUrls = {
@@ -49,4 +67,11 @@ export const scanUrls = {
   splat: (scanId) => `${API_BASE}/scans/${scanId}/splat`,
   mesh: (scanId) => `${API_BASE}/scans/${scanId}/mesh`,
   reportPdf: (scanId) => `${API_BASE}/reports/${scanId}/pdf`,
+
+  // The frame the box is drawn on. This is the same frame the model
+  // analyses - the backend picks it once, so the two cannot disagree.
+  tissueFrame: (scanId) => `${API_BASE}/scans/${scanId}/tissue/frame`,
+  // Cache-busted so a re-analysis shows the new overlay, not the old one.
+  tissueOverlay: (scanId, version = '') =>
+    `${API_BASE}/scans/${scanId}/tissue/overlay${version ? `?v=${version}` : ''}`,
 }

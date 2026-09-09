@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Scan, ScanStatus, TissueResult
 from app.paths import GAUSSIAN_SPLATTING_DIR, OUTPUT_DIR
-from app.services.tissue_service import TissueError, analyse, validate_box
+from app.services.tissue_service import (
+    TissueError,
+    analyse,
+    select_frame,
+    validate_box,
+)
 
 router = APIRouter()
 
@@ -122,3 +127,20 @@ def get_tissue_overlay(scan_id: str, db: Session = Depends(get_db)):
     if not os.path.isfile(result.overlay_path):
         raise HTTPException(status_code=404, detail="Overlay file is missing")
     return FileResponse(result.overlay_path, media_type="image/png")
+
+
+@router.get("/{scan_id}/tissue/frame")
+def get_tissue_frame(scan_id: str, db: Session = Depends(get_db)):
+    """The frame the user draws their box on.
+
+    This is the same frame `analyse` will use, because both call
+    select_frame. Showing a different one would put the box in the wrong
+    place on the photo actually analysed.
+    """
+    _get_scan_or_404(db, scan_id)
+    frames_dir = os.path.join(GAUSSIAN_SPLATTING_DIR, "data", f"scan_{scan_id}", "input")
+    try:
+        frame = select_frame(frames_dir)
+    except TissueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return FileResponse(str(frame), media_type="image/jpeg")

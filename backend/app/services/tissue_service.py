@@ -7,8 +7,18 @@ compiled CUDA extensions the reconstruction depends on are never disturbed.
 """
 import json
 import subprocess
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
 
 from app.paths import PROJECT_ROOT
+
+# Only the opening frames are candidates: the recording starts directly above
+# the wound and moves to the sides afterwards, so later frames are not
+# comparable views. Frame 0001 alone is a poor choice - it lands in the first
+# half-second, when the camera is often still focusing.
+OPENING_FRAMES = 5
 
 TISSUE_PYTHON = PROJECT_ROOT / "tissue-venv" / "Scripts" / "python.exe"
 
@@ -38,11 +48,11 @@ def validate_box(box):
     return (left, top, right, bottom)
 
 
-def build_command(frames_dir, box, outdir):
+def build_command(frame_path, box, outdir):
     return [
         str(TISSUE_PYTHON),
         "-m", "tissue.segment_image",
-        "--frames-dir", str(frames_dir),
+        "--image", str(frame_path),
         "--box", *[str(int(v)) for v in box],
         "--outdir", str(outdir),
     ]
@@ -64,7 +74,7 @@ def parse_output(stdout):
 def analyse(frames_dir, box, outdir):
     """Run tissue analysis for one scan and return the parsed result."""
     box = validate_box(box)
-    command = build_command(frames_dir, box, outdir)
+    command = build_command(select_frame(frames_dir), box, outdir)
     try:
         completed = subprocess.run(
             command, capture_output=True, text=True,
@@ -77,3 +87,28 @@ def analyse(frames_dir, box, outdir):
             f"tissue analysis failed: {(completed.stderr or completed.stdout)[-500:]}"
         )
     return parse_output(completed.stdout)
+
+
+def _sharpness(path):
+    """Spread of edge strengths — higher means crisper. Blur softens edges."""
+    grey = np.asarray(Image.open(path).convert("L"), dtype=np.float32)
+    edges = (
+        -4 * grey[1:-1, 1:-1]
+        + grey[:-2, 1:-1] + grey[2:, 1:-1]
+        + grey[1:-1, :-2] + grey[1:-1, 2:]
+    )
+    return float(edges.var())
+
+
+def select_frame(frames_dir):
+    """Choose which frame to analyse: the sharpest of the opening frames.
+
+    Chosen here, in the backend, rather than inside the model subprocess, so
+    that the frame shown on screen and the frame analysed are guaranteed to
+    be the same one. If they differed, the box the user drew would be applied
+    to a different photo.
+    """
+    frames = sorted(Path(frames_dir).glob("*.jpg"))[:OPENING_FRAMES]
+    if not frames:
+        raise TissueError(f"no frames found in {frames_dir}")
+    return max(frames, key=_sharpness)

@@ -1,4 +1,6 @@
+import numpy as np
 import pytest
+from PIL import Image
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -39,7 +41,9 @@ def client(tmp_path, monkeypatch):
 
     frames = tmp_path / "data" / "scan_scan-done" / "input"
     frames.mkdir(parents=True)
-    (frames / "0001.jpg").write_bytes(b"x")
+    # A real JPEG, not a placeholder: frame selection reads it to measure
+    # sharpness, so a fake byte string would fail before reaching the route.
+    Image.fromarray(np.full((32, 32, 3), 128, dtype=np.uint8)).save(frames / "0001.jpg")
     monkeypatch.setattr(tissue, "GAUSSIAN_SPLATTING_DIR", tmp_path)
     monkeypatch.setattr(tissue, "analyse", lambda *a, **k: dict(ANALYSED))
 
@@ -148,3 +152,19 @@ def test_fetching_a_stored_result_returns_it(client):
 
     assert response.status_code == 200
     assert response.json()["percentages"]["fibrin"] == 10.0
+
+
+def test_the_frame_to_draw_on_is_served_as_an_image(client):
+    # The user needs to see the photo before they can box the wound on it.
+    api, _ = client
+
+    response = api.get("/scans/scan-done/tissue/frame")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_the_frame_endpoint_is_404_when_the_scan_has_no_frames(client):
+    api, _ = client
+
+    assert api.get("/scans/scan-busy/tissue/frame").status_code == 404

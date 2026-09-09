@@ -6,6 +6,7 @@ from app.services.tissue_service import (
     TissueError,
     build_command,
     parse_output,
+    select_frame,
     validate_box,
 )
 
@@ -16,7 +17,7 @@ def test_command_uses_the_tissue_environment_not_the_backend_one():
     command = build_command("frames", (1, 2, 3, 4), "out")
 
     assert "tissue-venv" in command[0]
-    assert command[1:4] == ["-m", "tissue.segment_image", "--frames-dir"]
+    assert command[1:4] == ["-m", "tissue.segment_image", "--image"]
     assert "--box" in command
     assert command[command.index("--box") + 1: command.index("--box") + 5] == [
         "1", "2", "3", "4"
@@ -57,3 +58,36 @@ def test_validate_box_rejects_boxes_that_are_backwards_empty_or_negative(box):
 
 def test_validate_box_accepts_a_sensible_box():
     assert validate_box((10, 20, 110, 220)) == (10, 20, 110, 220)
+
+
+def test_selected_frame_is_the_sharpest_of_the_opening_frames(tmp_path):
+    # The screen must show the same frame the model analyses, or the box the
+    # user drew lands somewhere else. One chooser, here, avoids that.
+    import numpy as np
+    from PIL import Image
+
+    sharp = (np.indices((64, 64)).sum(axis=0) % 2 * 255).astype("uint8")
+    blurred = np.full((64, 64), 128, dtype="uint8")
+    for i, data in enumerate([blurred, blurred, sharp, blurred, blurred], start=1):
+        Image.fromarray(np.stack([data] * 3, -1)).save(tmp_path / f"{i:04d}.jpg")
+
+    assert select_frame(tmp_path).name == "0003.jpg"
+
+
+def test_selected_frame_ignores_frames_after_the_opening_ones(tmp_path):
+    # Later frames are shot from the side, so they are not candidates.
+    import numpy as np
+    from PIL import Image
+
+    sharp = (np.indices((64, 64)).sum(axis=0) % 2 * 255).astype("uint8")
+    blurred = np.full((64, 64), 128, dtype="uint8")
+    for i in range(1, 9):
+        data = sharp if i == 8 else blurred
+        Image.fromarray(np.stack([data] * 3, -1)).save(tmp_path / f"{i:04d}.jpg")
+
+    assert select_frame(tmp_path).name != "0008.jpg"
+
+
+def test_selecting_a_frame_from_an_empty_directory_raises(tmp_path):
+    with pytest.raises(TissueError, match="no frames"):
+        select_frame(tmp_path)

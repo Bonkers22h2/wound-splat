@@ -133,6 +133,13 @@ export default function ViewerSidebar({
       </button>
 
       <a
+        href={`/tissue/${scanId}`}
+        style={{ ...toggleButtonStyle(false, false), textDecoration: 'none' }}
+      >
+        Analyse Tissue Types
+      </a>
+
+      <a
         href={scanUrls.reportPdf(scanId)}
         style={{
           display: 'block', background: COLORS.primary, color: 'white',
