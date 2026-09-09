@@ -30,7 +30,7 @@ STEP_NAMES = {
     2: "Running COLMAP (Structure-from-Motion)",
     3: "Training 3D Gaussian Splatting",
     4: "Rendering preview images",
-    5: "Segmenting wound tissue",
+    5: "Isolating wound region",
     6: "Measuring wound dimensions",
     7: "Generating PDF report",
 }

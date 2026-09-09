@@ -12,13 +12,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routes import scans, patients, reports
+from app.routes import scans, patients, reports, tissue
 app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(scans.router, prefix="/scans", tags=["scans"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
+app.include_router(tissue.router, prefix="/scans", tags=["tissue"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.on_event("startup")
+def create_missing_tables():
+    # create any table that doesn't exist yet (e.g. tissue_results). This only
+    # adds missing tables; it never alters or drops an existing one, so scans
+    # already in the database are untouched.
+    from app.database import Base, engine
+    from app.models import db as _models  # noqa: F401  (registers the tables)
+
+    Base.metadata.create_all(bind=engine)
+
 
 @app.on_event("startup")
 def add_missing_columns():

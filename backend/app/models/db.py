@@ -1,4 +1,6 @@
-from sqlalchemy import Column, String, Float, DateTime, Enum, ForeignKey, Text, Integer
+from sqlalchemy import (
+    Boolean, Column, String, Float, DateTime, Enum, ForeignKey, Text, Integer
+)
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
@@ -47,6 +49,7 @@ class Scan(Base):
 
     patient = relationship("Patient", back_populates="scans")
     measurements = relationship("Measurement", back_populates="scan", uselist=False)
+    tissue_result = relationship("TissueResult", back_populates="scan", uselist=False)
 
 class Measurement(Base):
     __tablename__ = "measurements"
@@ -59,3 +62,41 @@ class Measurement(Base):
     height_cm = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     scan = relationship("Scan", back_populates="measurements")
+
+class TissueResult(Base):
+    """Tissue-type breakdown for one scan.
+
+    A separate table, not extra columns on Scan, because the project creates
+    tables with Base.metadata.create_all and has no migration tool:
+    create_all adds a missing table but never adds a column to an existing
+    one. This way the schema appears on its own and the existing scans
+    database is left alone.
+
+    Percentages are of wound pixels only, so the three sum to 100 and do not
+    change with how large the box was drawn. They are NULL when the box held
+    almost no wound - recording that as zeroes would read like a measurement.
+    """
+    __tablename__ = "tissue_results"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    scan_id = Column(String, ForeignKey("scans.id"), nullable=False, unique=True)
+
+    # which frame was used, and the box the user drew on it
+    frame_filename = Column(String, nullable=False)
+    box_left = Column(Integer, nullable=False)
+    box_top = Column(Integer, nullable=False)
+    box_right = Column(Integer, nullable=False)
+    box_bottom = Column(Integer, nullable=False)
+
+    fibrin_percent = Column(Float, nullable=True)
+    granulation_percent = Column(Float, nullable=True)
+    callus_percent = Column(Float, nullable=True)
+
+    # share of the drawn box the model called wound at all; separate from the
+    # percentages above, and sensitive to how tightly the box was drawn
+    wound_fraction_of_box = Column(Float, nullable=True)
+    no_wound_detected = Column(Boolean, default=False, nullable=False)
+
+    overlay_path = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    scan = relationship("Scan", back_populates="tissue_result")
