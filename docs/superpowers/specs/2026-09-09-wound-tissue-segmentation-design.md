@@ -222,7 +222,32 @@ coloured overlay and the percentages.
 **5. Report** — one new section in `backend/generate_report.py`.
 
 Swapping or retraining the model changes piece 1 and the checkpoint only. Pieces
-3, 4 and 5 are unaffected. `pipeline_direct.py` is not modified by this feature.
+3, 4 and 5 are unaffected.
+
+### Where it sits relative to the scan pipeline
+
+**It is not a pipeline step.** `pipeline_direct.py` is a background worker that
+processes scans from a queue, one at a time, unattended. This feature requires
+the user to draw a box, and a queue worker cannot wait for a human without
+blocking every scan behind it.
+
+So the scan pipeline runs to completion exactly as it does today, and tissue
+analysis is a **separate action the user triggers afterwards**, once the scan
+status is `rendered`.
+
+Two consequences:
+
+**The PDF is regenerated.** The report is written at step 7, before any box
+exists. After tissue analysis completes, the report is rebuilt with the tissue
+section added. A scan therefore always has a valid report even if the tissue
+step is never run, and `generate_scan_report` stays where it is.
+
+**Step 5 is renamed.** `STEP_NAMES[5]` currently reads "Segmenting wound
+tissue", but that step runs `wound_segment.py` and `segment_splat.py`, which
+isolate the wound's 3D points so step 6 can measure area and volume. It has
+nothing to do with tissue types. It becomes "Isolating wound region" — a string
+change only, no logic touched — so the progress bar and the code stop implying
+something the step does not do.
 
 ---
 
