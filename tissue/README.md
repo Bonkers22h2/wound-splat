@@ -119,6 +119,28 @@ Verified on 2026-09-09 after install:
 | `smp.Unet(encoder_name="mit_b3", decoder_attention_type="scse", classes=4)` | builds, 47.5M parameters |
 | Output shape for a 256×256 input | `(1, 4, 256, 256)` — correct |
 
+### Memory on the RTX 4050 (6 GB)
+
+Measured with `tissue-venv/Scripts/python.exe -m tissue.probe_batch_size`, which
+runs a real forward *and backward* pass — memory peaks during the backward pass,
+so a forward-only check would understate it.
+
+| Batch | Mixed precision | Full precision |
+|---:|---:|---:|
+| 4 | 1.04 GB | 1.36 GB |
+| 8 | 1.79 GB | 2.52 GB |
+| 16 | 3.29 GB | 4.85 GB |
+
+Nothing ran out of memory, so VRAM is not a constraint here — the 47.5M
+parameter model at 256×256 is simply small enough. **Training uses batch 8 with
+mixed precision** (1.79 GB), which leaves generous headroom and gives about 10
+optimiser steps per epoch across the 78 training images. Batch 16 would fit but
+halves the number of steps, which is the wrong trade on a dataset this small.
+
+The encoder is 44.1M of the 47.5M parameters and is **initialised from
+ImageNet**. With only 78 training images there is nowhere near enough data to
+learn general visual features from scratch, so this is doing much of the work.
+
 ### Why this environment is separate from the backend
 
 `backend/venv` contains **compiled** CUDA extensions — `diff_gaussian_rasterization`
