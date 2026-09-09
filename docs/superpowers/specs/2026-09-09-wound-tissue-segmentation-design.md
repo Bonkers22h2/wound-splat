@@ -113,6 +113,21 @@ background-inclusive score as if comparable would overstate it.
 Per-class Dice is always reported alongside the mean. Fibrin is expected to be
 the weakest class — it is the weakest for the published model too, at 69.01.
 
+### Two rules that change the number, fixed here
+
+**1. A class absent from both the prediction and the label scores `nan`, not
+zero, and is excluded from the average.** Fibrin is absent from 36 of the 110
+images. Scoring a correct "no fibrin here" as zero would drag the average down
+for a right answer. A class that *is* in the label but is missed still scores 0
+— a miss must be punished.
+
+**2. Dataset scores pool every pixel and are computed once, rather than
+averaging each image's score.** The images range from 67×67 to 266×266, so a
+per-image average would let the smallest image count as much as the largest.
+
+Both rules are implemented in `tissue/lib/metrics.py` and covered by tests in
+`tissue/tests/test_metrics.py`.
+
 ### How it is measured
 
 **Two numbers are reported, and they answer different questions.**
