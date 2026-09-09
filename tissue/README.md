@@ -119,6 +119,39 @@ Verified on 2026-09-09 after install:
 | `smp.Unet(encoder_name="mit_b3", decoder_attention_type="scse", classes=4)` | builds, 47.5M parameters |
 | Output shape for a 256×256 input | `(1, 4, 256, 256)` — correct |
 
+### Does it transfer to our own photos?
+
+Checked on 2026-09-09 against frame `0001.jpg` of the clay scan
+(`scan_f95891c7-…`), a 1080×1920 phone photo — a very different image from the
+small clinic close-ups the model was trained on.
+
+**It does not collapse.** The output is spatially coherent and follows the
+object, rather than being noise. The red clay is mostly labelled *granulation*,
+which is the clinically sensible response: granulation tissue is red, fibrin is
+yellow-white, callus is thickened pale skin. So the model is keying on colour in
+the way it should.
+
+**Run on the whole frame, it labelled the 5-piso coin as fibrin.** It also
+labelled patches of white paper. This is not a defect — the model has no "not a
+wound" class, having only ever been shown images already cropped to a wound. It
+is direct evidence, on our own data, for requiring a user-drawn box.
+
+| Input | Called "wound" | Of that: fibrin / granulation / callus |
+|---|---:|---|
+| Whole frame | 12.7% | 12.2% / 75.4% / 12.4% — includes the coin |
+| Box around the clay | 13.7% | 3.6% / 95.4% / 1.0% |
+| Box on the red centre | 7.3% | 0.0% / 79.4% / 20.6% |
+
+**Two honest limitations.**
+
+1. Within the box it marks only ~14% of pixels as wound, leaving much of the
+   obvious red crater as background. The response is real but incomplete, and it
+   shifts noticeably with how the box is drawn — compare the last two rows.
+2. **This cannot measure accuracy.** Clay is not tissue, so there is no correct
+   answer to score against. It tells us the model behaves sensibly on our
+   imaging conditions; it says nothing about whether the percentages are right.
+   Accuracy claims come only from the dataset test results.
+
 ### Memory on the RTX 4050 (6 GB)
 
 Measured with `tissue-venv/Scripts/python.exe -m tissue.probe_batch_size`, which
