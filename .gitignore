@@ -53,6 +53,7 @@ tissue/**
 !tissue/**/*.py
 !tissue/**/*.md
 !tissue/configs/*.json
+!tissue/requirements.txt
 
 # A clone of the upstream dataset repo, wherever it lands
 DFUTissueSegNet/
