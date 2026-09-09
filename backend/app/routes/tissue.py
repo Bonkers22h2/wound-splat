@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Scan, ScanStatus, TissueResult
 from app.paths import GAUSSIAN_SPLATTING_DIR, OUTPUT_DIR
+from app.services.report_service import rebuild_report_with_tissue
 from app.services.tissue_service import (
     TissueError,
     analyse,
@@ -105,6 +106,15 @@ def analyse_tissue(scan_id: str, box: BoxRequest, db: Session = Depends(get_db))
     stored.overlay_path = result.get("overlay")
     db.commit()
     db.refresh(stored)
+
+    # Rebuild the PDF so it carries the tissue section. Deliberately not
+    # allowed to fail the request: the result is already stored, and a stale
+    # report is a much smaller problem than throwing that away.
+    try:
+        rebuild_report_with_tissue(scan, stored)
+    except Exception as exc:  # noqa: BLE001 - never lose a stored result
+        print(f"[{scan_id}] Report rebuild failed (non-critical): {exc}")
+
     return _as_dict(stored)
 
 

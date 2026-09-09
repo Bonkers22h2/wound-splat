@@ -22,6 +22,75 @@ GRAY = colors.HexColor('#6b7280')
 LIGHT_GRAY = colors.HexColor('#f9fafb')
 BORDER = colors.HexColor('#e5e7eb')
 
+def tissue_flowables(tissue):
+    """Build the tissue-type section, or nothing at all when there is none.
+
+    Tissue analysis is optional and user-triggered — it needs someone to draw
+    a box round the wound — so most reports have no tissue data and simply
+    omit this section rather than showing blanks or zeroes.
+    """
+    if not tissue:
+        return []
+
+    styles = getSampleStyleSheet()
+    body = ParagraphStyle('tissue_body', parent=styles['Normal'],
+                          fontSize=8.5, textColor=GRAY, leading=11)
+    flowables = [
+        Spacer(1, 0.3*cm),
+        Paragraph('<font color="#0F6E56"><b>WOUND TISSUE COMPOSITION</b></font>',
+                  ParagraphStyle('tissue_title', fontSize=10, spaceAfter=4)),
+        HRFlowable(width="100%", thickness=1.5, color=TEAL),
+        Spacer(1, 0.2*cm),
+    ]
+    frame = tissue.get("frame_filename") or "unknown frame"
+
+    if tissue.get("no_wound_detected"):
+        flowables.append(Paragraph(
+            "<b>No wound tissue was detected in the selected area.</b> Less than "
+            "1% of the selection was identified as wound, so no percentages are "
+            f"reported. Analysed frame: {frame}.", body))
+        return flowables
+
+    rows = [
+        ["Tissue type", "Share of wound", "Description"],
+        ["Granulation", f"{tissue.get('granulation_percent') or 0:.1f}%",
+         "Healthy healing tissue"],
+        ["Fibrin", f"{tissue.get('fibrin_percent') or 0:.1f}%",
+         "Yellow slough"],
+        ["Callus", f"{tissue.get('callus_percent') or 0:.1f}%",
+         "Thickened skin at the wound edge"],
+    ]
+    table = Table(rows, colWidths=[4.5*cm, 3.5*cm, 9.5*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), TEAL_LIGHT),
+        ('TEXTCOLOR', (0, 0), (-1, 0), TEAL),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 1), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('TEXTCOLOR', (2, 1), (2, -1), GRAY),
+        ('BOX', (0, 0), (-1, -1), 0.5, BORDER),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('PADDING', (0, 0), (-1, -1), 5),
+    ]))
+    flowables.append(table)
+    flowables.append(Spacer(1, 0.2*cm))
+
+    wound_share = tissue.get("wound_fraction_of_box")
+    share_note = (
+        f" Of the selected area, {wound_share * 100:.0f}% was identified as wound "
+        "tissue; unlike the percentages above, that figure does depend on how the "
+        "area was drawn." if wound_share is not None else ""
+    )
+    flowables.append(Paragraph(
+        "The three values are shares of the wound itself and total 100%, so they "
+        "do not change with the size of the selected area." + share_note +
+        f" Analysed frame: {frame}. Tissue types are estimated by a model trained "
+        "on the DFUTissue dataset and are indicative, not a clinical diagnosis.",
+        body))
+    return flowables
+
+
 def get_recommendation(surface_area, volume, max_depth):
     # pick a severity level and care recommendations based on the measurements
     recs = []
@@ -91,7 +160,7 @@ def get_recommendation(surface_area, volume, max_depth):
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
                     output_dir, measurements, template_dir=None, registration_rate=None,
-                    render_iteration=15000):
+                    render_iteration=15000, tissue=None):
     # build the full pdf report for a scan and save it to the output folder
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -200,6 +269,11 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
         ('GRID', (0,0), (-1,-1), 0.5, BORDER),
     ]))
     story.append(sec_table)
+
+    # ── TISSUE COMPOSITION ───────────────────────────────────────────
+    # Empty unless the scan has been through tissue analysis, which is a
+    # separate user-triggered step after the pipeline finishes.
+    story.extend(tissue_flowables(tissue))
 
     # ── RENDER IMAGES ────────────────────────────────────────────────
     renders_base = os.path.join(output_dir, "train")

@@ -168,3 +168,34 @@ def test_the_frame_endpoint_is_404_when_the_scan_has_no_frames(client):
     api, _ = client
 
     assert api.get("/scans/scan-busy/tissue/frame").status_code == 404
+
+
+def test_the_report_is_rebuilt_so_it_includes_the_tissue_section(client, monkeypatch):
+    # The PDF is written during the pipeline, before any box exists, so it
+    # must be regenerated once tissue results are in.
+    api, _ = client
+    rebuilt = []
+    monkeypatch.setattr(tissue, "rebuild_report_with_tissue",
+                        lambda scan, result: rebuilt.append(result) or True)
+
+    api.post("/scans/scan-done/tissue",
+             json={"left": 10, "top": 20, "right": 110, "bottom": 220})
+
+    assert len(rebuilt) == 1
+    assert rebuilt[0].granulation_percent == 70.0
+
+
+def test_a_failing_report_rebuild_does_not_lose_the_tissue_result(client, monkeypatch):
+    # A stale PDF is a far smaller problem than discarding a result that has
+    # already been computed and stored.
+    api, session = client
+
+    def boom(scan, result):
+        raise RuntimeError("reportlab exploded")
+
+    monkeypatch.setattr(tissue, "rebuild_report_with_tissue", boom)
+    response = api.post("/scans/scan-done/tissue",
+                        json={"left": 10, "top": 20, "right": 110, "bottom": 220})
+
+    assert response.status_code == 200
+    assert session.query(TissueResult).one().granulation_percent == 70.0
