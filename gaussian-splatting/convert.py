@@ -44,6 +44,21 @@ use_gpu = 1 if not args.no_gpu else 0
 # to force CPU matching there. Defaults to 1 so the local CUDA COLMAP is unchanged.
 sift_match_gpu = os.getenv("COLMAP_SIFT_MATCH_GPU", "1")
 
+# Feature extraction below sets estimate_affine_shape and domain_size_pooling,
+# and COLMAP silently falls back to the CPU extractor whenever either is on -
+# they have no GPU implementation. So extraction is always CPU here, and COLMAP
+# defaults to one thread per logical core. At 1080x1920 with max_num_features
+# 16384, affine shape estimation and DSP each hold several scaled copies of the
+# image pyramid per thread, so a 20-core machine tries to keep 20 of those alive
+# at once and exhausts RAM ("Extracting SIFT features on the CPU can consume a
+# lot of RAM per thread for large images"). Cap the thread count instead of
+# weakening the matching quality these options buy us on low-texture skin.
+sift_extract_threads = os.getenv("COLMAP_SIFT_THREADS", "8")
+# Escape hatch if 8 threads still exhausts memory: COLMAP downscales anything
+# larger than this before extraction (its own default is 3200, so 1920-tall
+# frames are untouched unless this is lowered).
+sift_max_image_size = os.getenv("COLMAP_SIFT_MAX_IMAGE_SIZE", "3200")
+
 if not args.skip_matching:
     os.makedirs(args.source_path + "/distorted/sparse", exist_ok=True)
 
@@ -52,15 +67,36 @@ if not args.skip_matching:
     #  - more SIFT features per image so smooth surfaces still produce keypoints
     #  - estimate_affine_shape + domain_size_pooling greatly improve matching on
     #    low-texture / slightly blurred frames (at the cost of speed)
+    # Same prefix problem as the matcher below: COLMAP <=3.9 put num_threads and
+    # max_image_size under SiftExtraction, newer builds moved the execution
+    # options to FeatureExtraction while leaving the SIFT algorithm options
+    # where they were. Probe --help and use whichever this build exposes, so an
+    # unrecognized option can't abort extraction.
+    extractor_help = subprocess.run(
+        f"{colmap_command} feature_extractor --help",
+        shell=True, capture_output=True, text=True)
+    extractor_help_text = (extractor_help.stdout or "") + (extractor_help.stderr or "")
+
+    def extractor_opt(name, value):
+        for prefix in ("SiftExtraction", "FeatureExtraction"):
+            if f"--{prefix}.{name}" in extractor_help_text:
+                return f"--{prefix}.{name} {value} "
+        # If the probe returned nothing, fall back to the long-stable prefix.
+        if not extractor_help_text.strip():
+            return f"--SiftExtraction.{name} {value} "
+        return ""
+
     feat_extracton_cmd = (
         f"{colmap_command} feature_extractor "
         f"--database_path \"{args.source_path}/distorted/database.db\" "
         f"--image_path \"{args.source_path}/input\" "
         f"--ImageReader.single_camera 1 "
         f"--ImageReader.camera_model {args.camera} "
-        f"--SiftExtraction.max_num_features 16384 "
-        f"--SiftExtraction.estimate_affine_shape 1 "
-        f"--SiftExtraction.domain_size_pooling 1"
+        + extractor_opt("max_num_features", 16384)
+        + extractor_opt("estimate_affine_shape", 1)
+        + extractor_opt("domain_size_pooling", 1)
+        + extractor_opt("num_threads", sift_extract_threads)
+        + extractor_opt("max_image_size", sift_max_image_size)
     )
     exit_code = os.system(feat_extracton_cmd)
     if exit_code != 0:
