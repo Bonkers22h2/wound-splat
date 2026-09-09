@@ -181,6 +181,26 @@ plausible, not that it is measurably correct.
    imaging conditions; it says nothing about whether the percentages are right.
    Accuracy claims come only from the dataset test results.
 
+### End-to-end check (2026-09-09)
+
+Run against the real clay scan with both servers freshly started on current
+code, driving the browser rather than calling the API directly:
+
+| Step | Result |
+|---|---|
+| Reconstruction viewer still loads | 3D canvas renders, measurements shown, no console errors |
+| "Analyse Tissue Types" link from the viewer | navigates to `/tissue/[scanId]` |
+| Frame served to draw on | 1080×1920, the same frame the model reads |
+| Drag a tight box, press Analyse | 90.3% granulation / 0.0% fibrin / 9.7% callus |
+| Overlay refreshes | yes, cache-busted |
+| PDF downloaded through `/reports/{id}/pdf` | contains the **same** figures, read back with pypdf |
+| Backend log | all 200s, no errors |
+| `torch`, `diff_gaussian_rasterization`, `simple_knn` | still import; reconstruction environment untouched |
+
+Note the box was drawn tightly, on the wound centre rather than the whole clay
+slab. The looser box used earlier gave 92.4/2.2/5.4 — the same wound, different
+framing. This is the sensitivity described above, visible in normal use.
+
 ### Memory on the RTX 4050 (6 GB)
 
 Measured with `tissue-venv/Scripts/python.exe -m tissue.probe_batch_size`, which
