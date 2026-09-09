@@ -1,0 +1,43 @@
+{
+  "protocol": "5-fold CV over all 110 labelled images, fold seed 12345; identical training code and hyperparameters as the single-split run",
+  "epochs": 80,
+  "minutes": 26.6,
+  "cross_validation": {
+    "mean": 0.6576,
+    "std": 0.0135,
+    "values": [
+      0.6582,
+      0.6683,
+      0.6415,
+      0.6762,
+      0.644
+    ]
+  },
+  "cross_validation_per_class": {
+    "background": 0.9316,
+    "fibrin": 0.5609,
+    "granulation": 0.7815,
+    "callus": 0.6305
+  },
+  "fold_sizes": [
+    22,
+    22,
+    22,
+    22,
+    22
+  ],
+  "seed_check": {
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "values": [
+      0.7531,
+      0.7524,
+      0.7599
+    ],
+    "spread": 0.0075
+  },
+  "single_split_for_comparison": 0.7531
+}
