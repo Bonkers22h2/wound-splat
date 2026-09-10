@@ -6,6 +6,7 @@ The backend therefore needs no deep-learning packages of its own, and the
 compiled CUDA extensions the reconstruction depends on are never disturbed.
 """
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -20,7 +21,24 @@ from app.paths import PROJECT_ROOT
 # half-second, when the camera is often still focusing.
 OPENING_FRAMES = 5
 
-TISSUE_PYTHON = PROJECT_ROOT / "tissue-venv" / "Scripts" / "python.exe"
+def tissue_python(root=PROJECT_ROOT):
+    """Path to the tissue environment's interpreter, on either platform.
+
+    Development is on Windows (`Scripts/python.exe`) but the stack is deployed
+    to a Linux GPU pod (`bin/python`). Whichever exists is used; if neither is
+    installed yet, the path for this platform is returned so the resulting
+    error names the interpreter that was expected.
+    """
+    windows = root / "tissue-venv" / "Scripts" / "python.exe"
+    posix = root / "tissue-venv" / "bin" / "python"
+    if windows.exists():
+        return windows
+    if posix.exists():
+        return posix
+    return windows if os.name == "nt" else posix
+
+
+TISSUE_PYTHON = tissue_python()
 
 # Beyond this the subprocess is assumed stuck rather than slow. A single
 # 256x256 forward pass takes well under a second on the GPU; the rest is
@@ -50,7 +68,7 @@ def validate_box(box):
 
 def build_command(frame_path, box, outdir):
     return [
-        str(TISSUE_PYTHON),
+        str(tissue_python()),
         "-m", "tissue.segment_image",
         "--image", str(frame_path),
         "--box", *[str(int(v)) for v in box],

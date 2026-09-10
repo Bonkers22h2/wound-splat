@@ -7,6 +7,7 @@ from app.services.tissue_service import (
     build_command,
     parse_output,
     select_frame,
+    tissue_python,
     validate_box,
 )
 
@@ -91,3 +92,30 @@ def test_selected_frame_ignores_frames_after_the_opening_ones(tmp_path):
 def test_selecting_a_frame_from_an_empty_directory_raises(tmp_path):
     with pytest.raises(TissueError, match="no frames"):
         select_frame(tmp_path)
+
+
+def test_tissue_interpreter_is_found_on_a_linux_layout(tmp_path):
+    # The stack is deployed to a Linux GPU pod, where a virtualenv puts its
+    # interpreter in bin/python, not Scripts/python.exe.
+    posix = tmp_path / "tissue-venv" / "bin"
+    posix.mkdir(parents=True)
+    (posix / "python").write_text("")
+
+    assert tissue_python(tmp_path).as_posix().endswith("tissue-venv/bin/python")
+
+
+def test_tissue_interpreter_is_found_on_a_windows_layout(tmp_path):
+    windows = tmp_path / "tissue-venv" / "Scripts"
+    windows.mkdir(parents=True)
+    (windows / "python.exe").write_text("")
+
+    assert tissue_python(tmp_path).name == "python.exe"
+
+
+def test_tissue_interpreter_falls_back_to_this_platform_when_missing(tmp_path):
+    # Nothing installed yet: still return a sensible path so the error names
+    # the interpreter we expected rather than failing obscurely.
+    import os
+
+    expected = "python.exe" if os.name == "nt" else "python"
+    assert tissue_python(tmp_path).name == expected

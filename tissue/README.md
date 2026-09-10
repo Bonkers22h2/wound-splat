@@ -223,6 +223,30 @@ The encoder is 44.1M of the 47.5M parameters and is **initialised from
 ImageNet**. With only 78 training images there is nowhere near enough data to
 learn general visual features from scratch, so this is doing much of the work.
 
+### Deploying to the Linux GPU pod
+
+The application looks for the tissue interpreter at `tissue-venv/Scripts/python.exe`
+on Windows and `tissue-venv/bin/python` on Linux, whichever exists. Two things
+do **not** travel with `git pull`, so a fresh pod will not have them:
+
+1. **The environment.** Create it on the pod, or tissue analysis fails with a
+   missing-interpreter error:
+   ```bash
+   python3.11 -m venv tissue-venv
+   tissue-venv/bin/python -m pip install -r tissue/requirements.txt \
+       --extra-index-url https://download.pytorch.org/whl/cu126
+   ```
+2. **The trained model.** `tissue/checkpoints/*.pt` is gitignored (weights do
+   not belong in a public repo), so copy it across manually, e.g. with `scp`.
+
+`deploy/pod-start.sh` does not yet set either of these up.
+
+The dataset itself is **not** needed to run the feature — only to retrain. If
+the checkpoint is lost it can be rebuilt in about three minutes with
+`python -m tissue.train`, but only on a machine that still has the data. Back
+up both: the data cannot be re-downloaded without permission, and neither is in
+git.
+
 ### Why this environment is separate from the backend
 
 `backend/venv` contains **compiled** CUDA extensions — `diff_gaussian_rasterization`
