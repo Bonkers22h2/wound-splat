@@ -177,6 +177,10 @@ def _pipeline_task(scan_id: str) -> None:
             output_dir=output_dir,
             measurements={**measurements, "point_count": "N/A"},
             registration_rate=scan.registration_rate,
+            # Without a size reference the measurements are in arbitrary units,
+            # so the report withholds size-dependent notes rather than advising
+            # from a depth it cannot actually measure.
+            scale_calibrated=scale is not None,
         )
         update_progress(scan_id, 7, 100)
 

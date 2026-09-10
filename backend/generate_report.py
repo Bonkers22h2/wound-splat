@@ -91,76 +91,118 @@ def tissue_flowables(tissue):
     return flowables
 
 
-def get_recommendation(surface_area, volume, max_depth):
-    # pick a severity level and care recommendations based on the measurements
+def _general_notes():
+    """Context that applies to any diabetic foot ulcer, stated as context.
+
+    These appear on every report, so they must read as background a clinician
+    already knows, not as instructions issued to them about a patient this
+    system has never examined.
+    """
+    return [
+        ("Pressure offloading",
+         "Offloading with total contact casting or therapeutic footwear is widely used "
+         "to reduce plantar pressure, and is associated with faster healing and lower "
+         "recurrence in diabetic foot ulcers."),
+        ("Blood glucose",
+         "For patients with diabetes, poor glycaemic control is associated with slower "
+         "healing and higher infection risk; guidelines commonly reference an HbA1c "
+         "target below 7%. This system does not measure blood glucose."),
+        ("Follow-up scanning",
+         "Repeat scans at 7-14 day intervals allow volume change to be tracked over "
+         "time. A reduction of more than 20% per week is commonly regarded as a "
+         "positive healing trend."),
+    ]
+
+
+def get_recommendation(surface_area, volume, max_depth, scale_calibrated=True):
+    """Describe what was measured and what it is commonly associated with.
+
+    Wound-Splat is decision support: it reports observations, and a clinician
+    decides what they mean. Nothing here is phrased as an instruction, a
+    severity verdict, or a diagnosis.
+
+    When `scale_calibrated` is False there was no size reference in the video,
+    so the measurements are in arbitrary units. Size-dependent notes are then
+    withheld entirely — advice derived from an unmeasured depth would be
+    worse than no advice.
+    """
+    if not scale_calibrated:
+        return (
+            "unknown",
+            "Size not assessed — scale not calibrated",
+            GRAY, LIGHT_GRAY,
+            "No size reference (such as a coin or bank card) was found in the video, "
+            "so this scan is uncalibrated and its dimensions are relative rather than "
+            "absolute. Shape and tissue observations remain usable; size-dependent "
+            "notes are omitted. Include a size reference when filming to obtain "
+            "absolute measurements.",
+            _general_notes(),
+        )
+
+    measured = (
+        f"Measured maximum depth {max_depth:.1f} mm, surface area "
+        f"{surface_area:.2f} cm², estimated volume {volume:.2f} cm³. "
+    )
     recs = []
+
     if max_depth > 20:
         severity = "severe"
-        severity_label = "Severe — Immediate Attention Required"
+        severity_label = "Deep — greater than 20 mm"
         severity_color = RED
         severity_bg = RED_LIGHT
-        assessment = (
-            f"The wound presents with a maximum depth of {max_depth:.1f}mm, surface area of {surface_area:.2f}cm², "
-            f"and estimated volume of {volume:.2f}cm³. This depth indicates significant tissue involvement and "
-            "requires urgent clinical evaluation. Immediate referral to a wound care specialist is strongly advised."
+        assessment = measured + (
+            "Depths beyond 20 mm are commonly associated with deeper tissue "
+            "involvement."
         )
-        recs.append(("Urgent Referral Required",
-            "The wound depth exceeds 20mm, indicating potential deep tissue or bone involvement. "
-            "Immediate consultation with a podiatrist or wound care specialist is required within 24-48 hours."))
-        recs.append(("Imaging Recommended",
-            "Consider ordering X-ray or MRI to assess for osteomyelitis given the wound depth. "
-            "Deep wounds in diabetic patients are at high risk for bone involvement."))
+        recs.append(("Depth beyond 20 mm",
+            "Wounds of this depth are commonly reviewed by a podiatrist or wound-care "
+            "specialist. In people with diabetes, deep wounds carry a raised risk of "
+            "bone involvement."))
+        recs.append(("Imaging sometimes used at this depth",
+            "X-ray or MRI is sometimes used to look for osteomyelitis when a wound is "
+            "this deep. Whether that applies here is a clinical judgement."))
     elif max_depth > 10:
         severity = "moderate"
-        severity_label = "Moderate — Close Monitoring Required"
+        severity_label = "Intermediate — 10 to 20 mm"
         severity_color = colors.HexColor('#92400e')
         severity_bg = colors.HexColor('#fef3c7')
-        assessment = (
-            f"The wound presents with a maximum depth of {max_depth:.1f}mm, surface area of {surface_area:.2f}cm², "
-            f"and estimated volume of {volume:.2f}cm³. This indicates moderate tissue involvement requiring "
-            "regular monitoring and active wound care."
+        assessment = measured + (
+            "This range is commonly associated with moderate tissue involvement."
         )
-        recs.append(("Increase Monitoring Frequency",
-            "Schedule wound assessments every 3-5 days. Monitor for signs of infection including "
-            "increased redness, warmth, swelling, or purulent discharge."))
-        recs.append(("Wound Care Protocol",
-            "Maintain moist wound healing environment. Apply appropriate dressings based on wound exudate level. "
-            "Consider negative pressure wound therapy (NPWT) if wound volume exceeds 2cm³."))
+        recs.append(("Typical monitoring interval",
+            "Wounds in this range are commonly reassessed every 3-5 days. Signs "
+            "commonly watched for include increased redness, warmth, swelling or "
+            "purulent discharge."))
+        recs.append(("Dressing and therapy options",
+            "A moist wound-healing environment is commonly maintained, with dressings "
+            "chosen for the exudate level. Negative pressure wound therapy is "
+            "sometimes considered for volumes beyond about 2 cm³."))
     else:
         severity = "mild"
-        severity_label = "Mild — Routine Monitoring"
+        severity_label = "Shallow — under 10 mm"
         severity_color = GREEN
         severity_bg = GREEN_LIGHT
-        assessment = (
-            f"The wound presents with a maximum depth of {max_depth:.1f}mm, surface area of {surface_area:.2f}cm², "
-            f"and estimated volume of {volume:.2f}cm³. This suggests a superficial wound manageable with "
-            "standard wound care protocols."
+        assessment = measured + (
+            "This range is commonly associated with a superficial wound."
         )
-        recs.append(("Continue Standard Care",
-            "Maintain current wound care regimen. Clean wound with saline solution and apply appropriate dressing. "
-            "Monitor for any signs of deterioration at next scheduled visit."))
+        recs.append(("Typical management at this depth",
+            "Wounds in this range are commonly managed with standard care: cleaning "
+            "with saline and an appropriate dressing, with review at the next "
+            "scheduled visit."))
 
     if surface_area > 10:
-        recs.append(("Large Wound Area",
-            f"The wound surface area of {surface_area:.2f}cm² is above average for diabetic foot ulcers. "
-            "Consider advanced wound therapies such as bioengineered skin substitutes or growth factor treatment."))
+        recs.append(("Surface area beyond 10 cm²",
+            f"A surface area of {surface_area:.2f} cm² is larger than typical for "
+            "diabetic foot ulcers. Advanced therapies such as bioengineered skin "
+            "substitutes or growth factors are sometimes considered at this size."))
 
-    recs.append(("Offloading Required",
-        "Total contact casting or therapeutic footwear is recommended to reduce plantar pressure. "
-        "Offloading is critical for healing diabetic foot ulcers and preventing recurrence."))
-    recs.append(("Glycemic Control",
-        "Maintain blood glucose levels within target range (HbA1c < 7%). Poor glycemic control significantly "
-        "impairs wound healing and increases infection risk in diabetic patients."))
-    recs.append(("Next 3D Assessment",
-        "Schedule next 3D wound scan in 7-14 days to track volume change velocity. "
-        "A reduction in volume of >20% per week indicates positive healing trajectory."))
-
+    recs.extend(_general_notes())
     return severity, severity_label, severity_color, severity_bg, assessment, recs
 
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
                     output_dir, measurements, template_dir=None, registration_rate=None,
-                    render_iteration=15000, tissue=None):
+                    render_iteration=15000, tissue=None, scale_calibrated=True):
     # build the full pdf report for a scan and save it to the output folder
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -303,7 +345,7 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
     # ── ASSESSMENT ───────────────────────────────────────────────────
     section_title("Clinical Assessment")
     severity, severity_label, severity_color, severity_bg, assessment, recs = \
-        get_recommendation(surface_area, volume, max_depth)
+        get_recommendation(surface_area, volume, max_depth, scale_calibrated)
 
     badge_data = [[Paragraph(f'<b>{severity_label}</b>',
                              ParagraphStyle('b', fontSize=10, textColor=severity_color,

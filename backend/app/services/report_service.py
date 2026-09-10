@@ -47,6 +47,10 @@ def rebuild_report_with_tissue(scan, tissue_result) -> bool:
             "point_count": "N/A",
         },
         registration_rate=scan.registration_rate,
+        # Carried through on the rebuild too, so a report regenerated after
+        # tissue analysis does not quietly regain size-dependent notes that the
+        # original correctly withheld.
+        scale_calibrated=scan.scale_cm_per_unit is not None,
         tissue={
             "fibrin_percent": tissue_result.fibrin_percent,
             "granulation_percent": tissue_result.granulation_percent,
