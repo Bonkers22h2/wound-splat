@@ -2,6 +2,7 @@
 import os
 import shutil
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -42,13 +43,33 @@ def _latest_iteration_dir_or_404(scan: Scan) -> str:
     return latest
 
 
+def _as_utc(value: datetime | None) -> str | None:
+    """Serialise a stored timestamp with an explicit UTC offset.
+
+    Every timestamp we persist comes from datetime.utcnow(), so the values are
+    UTC - but they are stored naive, and a naive datetime serialises with no
+    timezone designator. The browser's new Date() reads an offset-less
+    timestamp as *local* time, which displayed every scan time shifted by the
+    viewer's UTC offset (8 hours early in Manila). Labelling them on the way
+    out makes the wire format state what the data has always meant, and fixes
+    rows already in the database as well as new ones.
+    """
+    if value is None:
+        return None
+    # Label a naive value rather than convert it: the wall-clock reading it
+    # holds already is UTC, so converting would shift the instant instead.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 def _scan_summary(scan: Scan) -> dict:
     # short scan info used in list views
     return {
         "id": scan.id,
         "video_filename": scan.video_filename,
         "status": scan.status,
-        "created_at": scan.created_at,
+        "created_at": _as_utc(scan.created_at),
         "current_step": scan.current_step,
         "current_step_name": scan.current_step_name,
         "progress_percent": scan.progress_percent,
@@ -61,7 +82,7 @@ def _scan_detail(scan: Scan) -> dict:
     return {
         **_scan_summary(scan),
         "patient_id": scan.patient_id,
-        "completed_at": scan.completed_at,
+        "completed_at": _as_utc(scan.completed_at),
         "frames_extracted": scan.frames_extracted,
         "frames_registered": scan.frames_registered,
     }
@@ -218,7 +239,7 @@ def get_queue(db: Session = Depends(get_db)):
         {
             **_scan_summary(scan),
             "patient_id": scan.patient_id,
-            "completed_at": scan.completed_at,
+            "completed_at": _as_utc(scan.completed_at),
         }
         for scan in scans
     ]

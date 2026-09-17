@@ -6,8 +6,12 @@ import { STATUS_STYLE } from '@/lib/theme'
 
 // Known-size objects the backend can detect for absolute-scale calibration.
 // Values must match REFERENCE_CHOICES in backend/app/services/scale_calibration.py.
+// '' is the unchosen placeholder and NO_REFERENCE is a deliberate "I used
+// nothing" - keeping them apart is what lets Submit insist on a real answer,
+// so a wrong default can't quietly calibrate the scan against the wrong object.
+const NO_REFERENCE = 'none'
 const REFERENCE_OPTIONS = [
-  { value: '', label: 'No reference (sizes will be approximate)' },
+  { value: NO_REFERENCE, label: 'No reference (sizes will be approximate)' },
   { value: 'card', label: 'Bank/ID card (recommended)' },
   { value: 'coin:us_quarter', label: 'Coin – US quarter' },
   { value: 'coin:us_nickel', label: 'Coin – US nickel' },
@@ -28,8 +32,10 @@ export default function PatientPage() {
   const [scans, setScans] = useState([])
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageIsError, setMessageIsError] = useState(false)
   const [step, setStep] = useState('login') // login | portal
-  const [referenceObject, setReferenceObject] = useState('card')
+  const [referenceObject, setReferenceObject] = useState('')
+  const [selectedFile, setSelectedFile] = useState(null)
   const fileRef = useRef()
 
   const handleLogin = async () => {
@@ -56,18 +62,38 @@ export default function PatientPage() {
     } catch { }
   }
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+  // Picking a file only stages it. Nothing is sent until Submit, so the video
+  // and the size reference reach the backend as one request.
+  const handleFileChange = (e) => {
+    setSelectedFile(e.target.files[0] || null)
+    setMessage('')
+  }
+
+  const canSubmit = selectedFile && referenceObject && !uploading
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return
     setUploading(true)
     setMessage('')
     try {
-      const data = await scanApi.upload(patientId, file, referenceObject)
+      // NO_REFERENCE is a UI-only value; the backend rejects anything outside
+      // its REFERENCE_CHOICES, so send nothing at all in that case.
+      const reference = referenceObject === NO_REFERENCE ? null : referenceObject
+      const data = await scanApi.upload(patientId, selectedFile, reference)
       if (data.scan_id) {
+        setMessageIsError(false)
         setMessage('Video uploaded successfully. Processing will begin shortly.')
+        setSelectedFile(null)
+        // Clear the input too, or re-picking the same file fires no change
+        // event and the form looks stuck.
+        if (fileRef.current) fileRef.current.value = ''
         loadScans(patientId)
+      } else {
+        setMessageIsError(true)
+        setMessage(data.detail || 'Upload failed. Please try again.')
       }
     } catch {
+      setMessageIsError(true)
       setMessage('Upload failed. Please try again.')
     }
     setUploading(false)
@@ -136,6 +162,7 @@ export default function PatientPage() {
                 border: '1px solid #d1d5db', fontSize: '14px', background: 'white'
               }}
             >
+              <option value="" disabled>— Select what you placed next to the wound —</option>
               {REFERENCE_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
@@ -149,13 +176,48 @@ export default function PatientPage() {
               background: '#f9fafb'
             }}
           >
-            <div style={{ fontSize: '32px', marginBottom: '0.5rem' }}>☁️</div>
-            <p style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Click to browse or drag and drop</p>
-            <p style={{ color: '#9ca3af', fontSize: '13px' }}>MP4, MOV up to 100MB</p>
-            <input ref={fileRef} type="file" accept="video/*" onChange={handleUpload} style={{ display: 'none' }} />
+            {selectedFile ? (
+              <>
+                <div style={{ fontSize: '32px', marginBottom: '0.5rem' }}>🎬</div>
+                <p style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{selectedFile.name}</p>
+                <p style={{ color: '#9ca3af', fontSize: '13px' }}>
+                  {(selectedFile.size / 1024 / 1024).toFixed(1)} MB · Click to choose a different video
+                </p>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '32px', marginBottom: '0.5rem' }}>☁️</div>
+                <p style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Click to browse or drag and drop</p>
+                <p style={{ color: '#9ca3af', fontSize: '13px' }}>MP4, MOV up to 100MB</p>
+              </>
+            )}
+            <input ref={fileRef} type="file" accept="video/*" onChange={handleFileChange} style={{ display: 'none' }} />
           </div>
-          {uploading && <p style={{ marginTop: '1rem', color: '#1e40af', fontSize: '14px' }}>Uploading...</p>}
-          {message && <p style={{ marginTop: '1rem', color: '#065f46', fontSize: '14px' }}>{message}</p>}
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            style={{
+              width: '100%', marginTop: '1.5rem',
+              background: canSubmit ? '#0F6E56' : '#d1d5db',
+              color: 'white', padding: '10px', borderRadius: '8px', border: 'none',
+              fontWeight: 600, fontSize: '14px',
+              cursor: canSubmit ? 'pointer' : 'not-allowed'
+            }}
+          >
+            {uploading ? 'Uploading…' : 'Submit scan'}
+          </button>
+          {!uploading && !canSubmit && (
+            <p style={{ marginTop: '0.75rem', color: '#9ca3af', fontSize: '13px', textAlign: 'center' }}>
+              {!selectedFile && !referenceObject
+                ? 'Choose a size reference and a video to submit.'
+                : !selectedFile ? 'Choose a video to submit.' : 'Choose the size reference you placed next to the wound.'}
+            </p>
+          )}
+          {message && (
+            <p style={{ marginTop: '1rem', color: messageIsError ? '#991b1b' : '#065f46', fontSize: '14px' }}>
+              {message}
+            </p>
+          )}
         </div>
 
         <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
