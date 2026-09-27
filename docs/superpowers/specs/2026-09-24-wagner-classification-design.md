@@ -7,6 +7,75 @@
 
 ---
 
+## 0. Amendments since approval
+
+The body below is kept as approved on 2026-09-24. These are the findings since
+that change it. **Read these first** — three of them contradict the body.
+
+### 2026-09-27 — DFUC2021 is not obtainable on the terms §4 assumed
+
+§4 states the request "costs nothing and has lead time". That is wrong. The
+published access conditions require **all** of:
+
+1. A **supervisor, professor or authorised institutional representative** must
+   submit the request. Student applications are *rejected automatically*.
+2. Submission from an **institutional email address**.
+3. A **licence agreement approved by an authorised representative of the
+   institution.**
+
+This is university paperwork with institutional sign-off, not an email. The cost
+side of §4's reasoning no longer holds. Set against a payoff already bounded by
+the challenge's own published ceiling (infection F1 0.68, ischaemia 0.56, against
+this design's 0.50 admission floor), **the decision is to not pursue it.**
+
+Consequence, unchanged from §4's designed fallback: Wagner grade 3 and the entire
+UT stage axis (§8) are reported as `not assessed`, with the access constraint and
+the published ceiling cited as the documented reason. §4's claim that "either way
+there is a defensible outcome" still stands — this is that outcome.
+
+### 2026-09-27 — WoundTissue ships no palette file, and its colours conflict with DFUTissue
+
+§4's class table is correct, but it implies a palette file that **does not exist**.
+DFUTissue shipped `Original/Palette/palette_colorCode.txt`, which is what settled
+its colour binding authoritatively. WoundTissue has only `image/`, `label/`,
+`LICENSE`, `README.md` and `sample.png` — the colour mapping exists solely as
+prose in the README.
+
+The two datasets disagree on what the same colour means:
+
+| Colour | DFUTissue | WoundTissue |
+|---|---|---|
+| Red | fibrin | **granulation** |
+| Blue | callus | **background** |
+
+Reusing DFUTissue's palette assumptions on WoundTissue masks would silently
+relabel granulation as fibrin and background as callus. An inverted colour
+binding is precisely the error that the first segmentation attempt made.
+
+**Therefore: step 2 of §11 must verify the mapping empirically against actual
+mask pixel values before any training, and record the verified binding.** Prose
+in a README is not authoritative.
+
+### 2026-09-27 — full citation verified
+
+§4 cites "Kabir et al." The verified author list, checked against arXiv:2502.10652:
+**M. A. Kabir, N. Roy, M. E. Hossain, J. Featherston, S. Ahmed** (2025). The 147
+images and six classes stated in §4 are confirmed. Recorded in `CITATIONS.md`.
+
+### 2026-09-27 — the clay model no longer exists
+
+§10 says it "remains the only physical model". The physical clay is gone. Its
+captured frames and finished reconstructions survive under
+`gaussian-splatting/data/` and `gaussian-splatting/output/`, so the end-to-end
+plumbing check in §10 can still run against saved data — but nothing can be
+re-filmed and no ruler ground truth can be taken from it.
+
+This does not weaken §10's conclusion, which was already that clay *cannot*
+validate Wagner accuracy. It only removes an option for re-running the check on
+fresh capture.
+
+---
+
 ## 1. Purpose
 
 This feature closes thesis Objective 3: mapping a scanned wound to the **Wagner

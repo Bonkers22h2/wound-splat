@@ -8,7 +8,9 @@ Developed as a thesis project at the Technological Institute of the Philippines,
 
 ## Overview
 
-Wound-Splat reconstructs a 3D model of a wound from a smartphone video, then automatically computes clinical measurements (surface area, volume, max depth) and generates a PDF assessment report with recommendations.
+Wound-Splat reconstructs a 3D model of a wound from a smartphone video, then automatically computes clinical measurements (surface area, volume, max depth) and generates a PDF report.
+
+It is **decision support, not diagnosis.** The report states what was measured and what findings of that kind are commonly associated with; a clinician decides what it means. Nothing in the system diagnoses a patient, and an uncalibrated scan produces no size-dependent observations at all.
 
 ```
 Smartphone video
@@ -22,7 +24,7 @@ Wound segmentation + measurement
 PDF report + interactive 3D viewer
 ```
 
-**Measurement geometry validated** against synthetic wound phantoms with analytic ground truth: all metrics within 10% (most within 4%) — see [Validation](#validation). Absolute scale is calibrated from a bank card or coin placed next to the wound during capture.
+**Measurement geometry validated** against synthetic wound phantoms with analytic ground truth: all metrics within 10% (most within 4%) — see [Validation](#validation). This validates the measurement *mathematics*. **End-to-end accuracy through the full capture-and-reconstruction chain has not yet been measured against a physical object of known size** — see [Known Limitations](#known-limitations). Absolute scale is calibrated from a bank card or coin placed next to the wound during capture.
 
 ---
 
@@ -296,17 +298,34 @@ wound-splat/
 
 This validates the measurement math, **not** the 3D reconstruction. End-to-end accuracy also depends on capture quality and scale calibration.
 
-### Full pipeline (physical)
+### Full pipeline (physical) — not yet performed
 
-To validate the whole chain, film a real object of known size with a card/coin beside it and run it as a scan:
+> **Status: outstanding.** No end-to-end accuracy figure exists for this project.
+> Every number in the table above comes from computer-generated geometry handed
+> straight to `wound_measure.py`. The chain that actually runs in use — video →
+> COLMAP → 3DGS → measurement — has never been checked against an object whose
+> true size is known.
+>
+> This is the largest open gap in the project's validation. The section below is
+> the procedure for closing it, not a record of it having been done.
 
-- **Rubik's cube** (measure yours; standard ≈ 57 mm/side) — validates scale, dimensions and surface area.
+To close it, film a real object of known size with a card/coin beside it and run it as a normal scan:
+
+- **Rubik's cube** (measure yours; standard ≈ 57 mm/side) — validates scale, dimensions and surface area. It is convex, so it **cannot** validate depth or volume.
 - **Bowl or measuring cup with a known volume of water** (e.g. 100 ml marked, filmed empty) — validates cavity depth and volume, which convex objects cannot.
+
+Every figure this produces rests on the reference constant used for scale. Before
+trusting a result, confirm the `card`/`coin:*` entry passed to `estimate_scale.py`
+matches the physical reference actually in frame — a reference whose real diameter
+differs from the table in that script biases every millimetre by the same ratio.
 
 ---
 
 ## Known Limitations
 
+- **End-to-end measurement accuracy is unvalidated.** Only the measurement mathematics has been checked, against synthetic geometry. No physical object of known size has been run through the full pipeline — so the published 10% figure describes `wound_measure.py`, not the system. See [Validation](#validation)
+- **Tissue percentages depend on how the region is selected.** The tissue model was trained on images cropped tight to a wound and has no "not a wound" class, so a loosely drawn box pulls the percentages noticeably. The repeatability of this has not been measured. See `tissue/RESULTS.md`
+- **The tissue model has only three classes** — fibrin, granulation and callus. Shown necrotic tissue, eschar or slough it has no class to assign and no way to abstain, so it will apply one of its three labels anyway
 - Single-user, local execution — no concurrent scan processing (single GPU)
 - Absolute scale requires a bank card or coin placed flat next to the wound during capture; without one (or when detection refuses), measurements fall back to an uncalibrated 1 unit = 1 cm assumption and are flagged as approximate in the viewer
 - Depth and volume need 1–2 cm of healthy skin around the wound in frame — the reference plane is fitted to that margin

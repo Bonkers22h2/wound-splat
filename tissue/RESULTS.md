@@ -162,6 +162,12 @@ with the data available.
 eschar and slough. The model has no class for them and no way to say "I don't
 know", so it will assign one of its three labels with apparent confidence.
 
+> This is an open defect, not merely a scope note — shown necrotic tissue the
+> model returns a confident wrong label. Addressed by the second model proposed
+> in `docs/superpowers/specs/2026-09-24-wagner-classification-design.md` §3,
+> which adds a necrosis class from a different dataset. Not yet implemented as
+> of 2026-09-27.
+
 **The result depends on how the region is selected.** The model was trained on
 images cropped tight to a wound and has no "not a wound" class. Given a wider
 photograph it labels healthy skin as callus — on wide foot shots, callus
