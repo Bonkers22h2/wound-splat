@@ -1,97 +1,118 @@
 'use client'
-import { useRef, useState } from 'react'
-import { COLORS } from '@/lib/theme'
+import { useEffect, useRef, useState } from 'react'
+import { drawBox, moveBox, resizeBox } from './selection.mjs'
+import styles from './selection.module.css'
 
-// The image is displayed scaled to fit, but the backend needs coordinates in
-// the original photo's pixels. Everything below is tracked in display pixels
-// and converted once, on release.
-function toNaturalBox(box, img) {
-  const scaleX = img.naturalWidth / img.clientWidth
-  const scaleY = img.naturalHeight / img.clientHeight
-  return {
-    left: Math.round(Math.min(box.x1, box.x2) * scaleX),
-    top: Math.round(Math.min(box.y1, box.y2) * scaleY),
-    right: Math.round(Math.max(box.x1, box.x2) * scaleX),
-    bottom: Math.round(Math.max(box.y1, box.y2) * scaleY),
-  }
-}
+const corners = { nw: 'Top left', ne: 'Top right', sw: 'Bottom left', se: 'Bottom right' }
 
-export default function BoxSelector({ src, onChange, disabled }) {
-  const imgRef = useRef(null)
-  const [box, setBox] = useState(null)
-  const [drawing, setDrawing] = useState(false)
+export default function BoxSelector({ src, box, onChange, disabled, onInteraction }) {
+  const image = useRef(null)
+  const preview = useRef(null)
+  const gesture = useRef(null)
+  const [size, setSize] = useState(null)
+  const [failed, setFailed] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    if (!box || !size || !preview.current) return
+    const canvas = preview.current
+    const width = box.right - box.left
+    const height = box.bottom - box.top
+    canvas.width = Math.min(720, width)
+    canvas.height = Math.max(1, Math.round(canvas.width * height / width))
+    canvas.getContext('2d').drawImage(image.current, box.left, box.top, width, height, 0, 0, canvas.width, canvas.height)
+  }, [box, size])
 
   const pointAt = (event) => {
-    const rect = imgRef.current.getBoundingClientRect()
+    const rect = image.current.getBoundingClientRect()
     return {
-      x: Math.max(0, Math.min(event.clientX - rect.left, rect.width)),
-      y: Math.max(0, Math.min(event.clientY - rect.top, rect.height)),
+      x: Math.round(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * size.width),
+      y: Math.round(Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * size.height),
     }
   }
-
-  const start = (event) => {
-    if (disabled) return
+  const start = (event, mode) => {
+    if (disabled || !size || gesture.current || event.button !== 0) return
     event.preventDefault()
-    const { x, y } = pointAt(event)
-    setBox({ x1: x, y1: y, x2: x, y2: y })
-    setDrawing(true)
-    onChange(null)
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    gesture.current = { mode, start: pointAt(event), original: box, pointer: event.pointerId }
+    onInteraction(true)
+    setNotice('')
   }
-
-  const move = (event) => {
-    if (!drawing) return
-    const { x, y } = pointAt(event)
-    setBox((previous) => ({ ...previous, x2: x, y2: y }))
+  const update = (event) => {
+    const active = gesture.current
+    if (!active || active.pointer !== event.pointerId) return
+    const point = pointAt(event)
+    const next = active.mode === 'draw' ? drawBox(active.start, point)
+      : active.mode === 'move' ? moveBox(active.original, point.x - active.start.x, point.y - active.start.y, size)
+        : resizeBox(active.original, active.mode, point, size)
+    active.latest = next
+    if (next.right - next.left >= 8 && next.bottom - next.top >= 8) onChange(next)
   }
-
-  const finish = () => {
-    if (!drawing) return
-    setDrawing(false)
-    const width = Math.abs(box.x2 - box.x1)
-    const height = Math.abs(box.y2 - box.y1)
-    // A stray click is not a box. Below a few pixels, treat it as a reset
-    // rather than sending a sliver the model cannot use.
-    if (width < 8 || height < 8) {
-      setBox(null)
-      onChange(null)
-      return
+  const finish = (event, cancel = false) => {
+    const active = gesture.current
+    if (!active || active.pointer !== event.pointerId) return
+    if (!cancel) update(event)
+    const next = active.latest
+    if (cancel) onChange(active.original)
+    else if (!next || next.right - next.left < 8 || next.bottom - next.top < 8) {
+      onChange(active.original)
+      setNotice('That selection was too small. Drag a larger box around the wound.')
     }
-    onChange(toNaturalBox(box, imgRef.current))
+    gesture.current = null
+    onInteraction(false)
   }
-
-  const rect = box && {
-    left: Math.min(box.x1, box.x2),
-    top: Math.min(box.y1, box.y2),
-    width: Math.abs(box.x2 - box.x1),
-    height: Math.abs(box.y2 - box.y1),
+  const keyboard = (event, corner) => {
+    if (disabled || !box || !size || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    const step = event.shiftKey ? 10 : 1
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
+    onChange(corner ? resizeBox(box, corner, {
+      x: (corner.includes('w') ? box.left : box.right) + dx,
+      y: (corner.includes('n') ? box.top : box.bottom) + dy,
+    }, size) : moveBox(box, dx, dy, size))
   }
+  const rect = box && size ? {
+    left: `${box.left / size.width * 100}%`, top: `${box.top / size.height * 100}%`,
+    width: `${(box.right - box.left) / size.width * 100}%`, height: `${(box.bottom - box.top) / size.height * 100}%`,
+  } : null
 
   return (
-    <div
-      style={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}
-      onMouseMove={move}
-      onMouseUp={finish}
-      onMouseLeave={finish}
-    >
-      <img
-        ref={imgRef}
-        src={src}
-        alt="Opening frame from the scan, for selecting the wound"
-        onMouseDown={start}
-        draggable={false}
-        style={{
-          maxHeight: '70vh', maxWidth: '100%', borderRadius: '8px',
-          cursor: disabled ? 'wait' : 'crosshair', userSelect: 'none',
-        }}
-      />
-      {rect && (
-        <div style={{
-          position: 'absolute', ...rect,
-          border: `2px solid ${COLORS.primaryLight}`,
-          background: 'rgba(29,158,117,0.15)',
-          pointerEvents: 'none', borderRadius: '2px',
-        }} />
-      )}
-    </div>
+    <section className={styles.selector}>
+      <h2>1. Select the wound</h2>
+      <p id="selection-help">Drag on the photo to draw. Move the box or drag its corners to adjust it.</p>
+      {!size && !failed && <p role="status">Loading wound photo…</p>}
+      {failed && <p role="alert">The wound photo could not load. Return to the 3D model and check that the scan has finished, then reopen this page.</p>}
+      <div className={styles.frame}
+        onPointerDown={(event) => start(event, 'draw')}
+        onPointerMove={update} onPointerUp={(event) => finish(event)}
+        onPointerCancel={(event) => finish(event, true)}
+        onLostPointerCapture={(event) => finish(event, true)}>
+        <img ref={image} src={src} alt="Scan photo for selecting the wound" draggable={false}
+          onLoad={(event) => { setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); setFailed(false) }}
+          onError={() => { setFailed(true); setSize(null); onChange(null) }} />
+        {rect && <div className={styles.box} style={rect}>
+          <button type="button" className={styles.move} aria-label="Move selection using arrow keys" aria-describedby="selection-help"
+            disabled={disabled} onPointerDown={(event) => start(event, 'move')} onKeyDown={(event) => keyboard(event)} />
+          {Object.entries(corners).map(([corner, label]) => <button key={corner} type="button"
+            className={`${styles.handle} ${styles[corner]}`} aria-label={`${label} corner: use arrow keys to resize`}
+            disabled={disabled} onPointerDown={(event) => start(event, corner)} onKeyDown={(event) => keyboard(event, corner)} />)}
+        </div>}
+      </div>
+      <div className={styles.toolbar}>
+        <button type="button" disabled={disabled || !box} onClick={() => { onChange(null); setNotice('Selection cleared.') }}>Reset selection</button>
+        <button type="button" disabled={disabled || !size || !!box} onClick={() => onChange({
+          left: Math.round(size.width * .25), top: Math.round(size.height * .25),
+          right: Math.round(size.width * .75), bottom: Math.round(size.height * .75),
+        })}>Start with a centered box</button>
+      </div>
+      <p className={styles.hint}>Keyboard: focus the box or a corner and use arrow keys. Hold Shift for larger steps.</p>
+      <p role="status" className={styles.hint}>{notice}</p>
+      <h2>2. Check the close-up</h2>
+      <p>Include the wound and its relevant edge. Keep unrelated skin, the coin, and other background objects outside the box.</p>
+      {box && size ? <canvas ref={preview} className={styles.preview} role="img" aria-label="Close-up of the exact area selected for tissue analysis" />
+        : <div className={styles.empty}>Your selected area will appear here.</div>}
+    </section>
   )
 }

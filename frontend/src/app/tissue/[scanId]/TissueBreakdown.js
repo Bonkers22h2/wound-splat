@@ -67,8 +67,8 @@ export default function TissueBreakdown({ result }) {
         color: COLORS.textMuted, borderTop: `1px solid ${COLORS.border}`,
         paddingTop: '0.75rem',
       }}>
-        Percentages are shares of the wound only, so they total 100% and do
-        not change with how large the box is drawn.
+        Percentages describe the tissue the model identified in the selection and total 100%.
+        Changing the selected area can change these results.
         {woundShare != null && (
           <> The model called <strong>{(woundShare * 100).toFixed(0)}%</strong> of
           the box wound tissue; that figure does depend on the box, so draw it
