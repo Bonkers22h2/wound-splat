@@ -121,6 +121,14 @@ Verified on 2026-09-09 after install:
 
 ### Does it transfer to our own photos?
 
+> **Note (2026-09-27): the physical clay model no longer exists.** The checks in
+> this section and the end-to-end check below were performed while it did, and
+> the captured frames and finished reconstructions remain on disk under
+> `gaussian-splatting/data/` and `gaussian-splatting/output/`. They can still be
+> re-run against the saved data. They **cannot** be re-filmed, and no new ground
+> truth can be taken from the clay with a ruler. Any future physical validation
+> needs a different object of known size — see the root `README.md`.
+
 Checked on 2026-09-09 against frame `0001.jpg` of the clay scan
 (`scan_f95891c7-…`), a 1080×1920 phone photo — a very different image from the
 small clinic close-ups the model was trained on.
