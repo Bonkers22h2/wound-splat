@@ -56,6 +56,17 @@ tissue/**
 !tissue/results/*.json
 !tissue/requirements.txt
 
+# Dataset material and annotation work must always remain local.
+# These explicit rules take priority over the source-code allowlist above.
+/tissue/raw/
+/tissue/annotation_work/
+/tissue/checkpoints/
+/tissue/outputs/
+/tissue/datasets/
+/tissue/**/[Ll]abeled/
+/tissue/**/[Uu]nlabeled/
+/tissue/**/[Uu]nlabelled/
+
 # A clone of the upstream dataset repo, wherever it lands
 DFUTissueSegNet/
 
