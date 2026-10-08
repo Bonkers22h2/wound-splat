@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { drawBox, moveBox, resizeBox } from './selection.mjs'
+import { drawBox, imageNaturalSize, moveBox, resizeBox } from './selection.mjs'
 import styles from './selection.module.css'
 
 const corners = { nw: 'Top left', ne: 'Top right', sw: 'Bottom left', se: 'Bottom right' }
@@ -12,6 +12,11 @@ export default function BoxSelector({ src, box, onChange, disabled, onInteractio
   const [size, setSize] = useState(null)
   const [failed, setFailed] = useState(false)
   const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    setFailed(false)
+    setSize(imageNaturalSize(image.current))
+  }, [src])
 
   useEffect(() => {
     if (!box || !size || !preview.current) return
@@ -90,7 +95,7 @@ export default function BoxSelector({ src, box, onChange, disabled, onInteractio
         onPointerCancel={(event) => finish(event, true)}
         onLostPointerCapture={(event) => finish(event, true)}>
         <img ref={image} src={src} alt="Scan photo for selecting the wound" draggable={false}
-          onLoad={(event) => { setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); setFailed(false) }}
+          onLoad={(event) => { setSize(imageNaturalSize(event.currentTarget)); setFailed(false) }}
           onError={() => { setFailed(true); setSize(null); onChange(null) }} />
         {rect && <div className={styles.box} style={rect}>
           <button type="button" className={styles.move} aria-label="Move selection using arrow keys" aria-describedby="selection-help"

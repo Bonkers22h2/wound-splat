@@ -1,4 +1,8 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+export function imageNaturalSize(image) {
+  if (!image?.complete || !image.naturalWidth || !image.naturalHeight) return null
+  return { width: image.naturalWidth, height: image.naturalHeight }
+}
 export function drawBox(a, b) {
   return { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) }
 }

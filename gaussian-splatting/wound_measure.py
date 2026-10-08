@@ -44,6 +44,7 @@ CORE_RADIUS_PERCENTILE = 30
 # RANSAC inlier threshold = this x median nearest-neighbour distance.
 RANSAC_NN_MULT = 3.0
 RANSAC_ITERATIONS = 2000
+RANSAC_SEED = 12345
 
 # Points deeper below the plane than this x fit noise count as wound cavity.
 DEPTH_SIGMA_MULT = 3.0
@@ -57,6 +58,59 @@ MAX_GRID = 256
 
 def _median_nn_distance(pcd) -> float:
     return float(np.median(np.asarray(pcd.compute_nearest_neighbor_distance())))
+
+
+def _deterministic_ransac_plane(points: np.ndarray, threshold: float):
+    """Fit a plane with repeatable RANSAC sampling and deterministic ties."""
+    rng = np.random.default_rng(RANSAC_SEED)
+    best_inliers = None
+    best_count = -1
+    best_residual = np.inf
+
+    for _ in range(RANSAC_ITERATIONS):
+        sample = points[rng.choice(len(points), size=3, replace=False)]
+        normal = np.cross(sample[1] - sample[0], sample[2] - sample[0])
+        norm = np.linalg.norm(normal)
+        if norm <= np.finfo(float).eps:
+            continue
+        normal /= norm
+        offset = -float(sample[0] @ normal)
+        distances = np.abs(points @ normal + offset)
+        inliers = np.flatnonzero(distances <= threshold)
+        if not len(inliers):
+            continue
+        residual = float(distances[inliers].mean())
+        if len(inliers) > best_count or (
+            len(inliers) == best_count and residual < best_residual
+        ):
+            best_inliers = inliers
+            best_count = len(inliers)
+            best_residual = residual
+
+    if best_inliers is None:
+        best_inliers = np.arange(len(points))
+
+    # Orthogonal least-squares refinement on the selected consensus set.
+    inlier_points = points[best_inliers]
+    centroid = inlier_points.mean(axis=0)
+    _, _, vt = np.linalg.svd(inlier_points - centroid, full_matrices=False)
+    normal = vt[-1]
+    normal /= np.linalg.norm(normal)
+    offset = -float(centroid @ normal)
+
+    # Recalculate the final consensus for the refined plane and refine once.
+    final_inliers = np.flatnonzero(
+        np.abs(points @ normal + offset) <= threshold
+    )
+    if len(final_inliers) >= 3:
+        inlier_points = points[final_inliers]
+        centroid = inlier_points.mean(axis=0)
+        _, _, vt = np.linalg.svd(inlier_points - centroid, full_matrices=False)
+        normal = vt[-1]
+        normal /= np.linalg.norm(normal)
+        offset = -float(centroid @ normal)
+
+    return normal, offset, final_inliers
 
 
 def _fit_reference_plane(points: np.ndarray, median_nn: float):
@@ -76,16 +130,10 @@ def _fit_reference_plane(points: np.ndarray, median_nn: float):
     ring_mask = r >= np.percentile(r, RING_RADIUS_PERCENTILE)
     ring = points[ring_mask] if ring_mask.sum() >= 20 else points
 
-    ring_pcd = o3d.geometry.PointCloud()
-    ring_pcd.points = o3d.utility.Vector3dVector(ring)
-    (a, b, c, d), inlier_idx = ring_pcd.segment_plane(
-        distance_threshold=RANSAC_NN_MULT * median_nn,
-        ransac_n=3,
-        num_iterations=RANSAC_ITERATIONS,
+    normal, offset, inlier_idx = _deterministic_ransac_plane(
+        ring,
+        threshold=RANSAC_NN_MULT * median_nn,
     )
-    normal = np.array([a, b, c])
-    norm = np.linalg.norm(normal)
-    normal, offset = normal / norm, d / norm
 
     # Orient the normal so the wound interior (innermost points) is below the
     # plane: signed distance of the core must come out negative.
