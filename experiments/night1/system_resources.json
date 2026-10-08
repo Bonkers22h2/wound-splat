@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-10-07T15:41:25.478Z",
+  "platform": "win32",
+  "release": "10.0.26200",
+  "architecture": "x64",
+  "cpu_model": "Intel(R) Core(TM) i5-14500HX",
+  "cpu_logical_processors": 20,
+  "total_memory_gb": 31.71,
+  "free_memory_gb": 11.34
+}
