@@ -24,7 +24,7 @@ Wound segmentation + measurement
 PDF report + interactive 3D viewer
 ```
 
-**Measurement geometry validated** against synthetic wound phantoms with analytic ground truth: all metrics within 10% (most within 4%) — see [Validation](#validation). This validates the measurement *mathematics*. **End-to-end accuracy through the full capture-and-reconstruction chain has not yet been measured against a physical object of known size** — see [Known Limitations](#known-limitations). Absolute scale is calibrated from a bank card or coin placed next to the wound during capture.
+**Measurement geometry validated** against synthetic wound phantoms with analytic ground truth using a 10% tolerance — see [Validation](#validation). This checks the measurement mathematics. SALVE scanner comparisons assess surface agreement separately; **end-to-end wound area, volume and depth accuracy remains unvalidated**. Absolute scale is calibrated from a bank card or coin placed next to the wound during capture.
 
 ---
 
@@ -37,8 +37,8 @@ PDF report + interactive 3D viewer
 ### Software (Windows 10/11)
 | Component | Version | Notes |
 |---|---|---|
-| **Python** | **3.11.x** | 3.12+ is **not** supported — the pinned PyTorch/Open3D wheels have no 3.12 builds. |
-| **Node.js** | 18+ (20 LTS recommended) | Includes `npm`. |
+| **Python** | **3.11.x** | Version used by the project's backend and tissue environments. |
+| **Node.js** | **20.9+** | Minimum required by the installed Next.js 16 package; includes `npm`. |
 | **NVIDIA driver** | Latest for your GPU | Must support CUDA 12.6. |
 | **CUDA Toolkit** | **12.6** | Must match the `+cu126` PyTorch wheels below. |
 | **Visual Studio 2022 Build Tools** | C++ workload | Needed to compile the 3DGS CUDA extensions (see below). |
@@ -60,7 +60,7 @@ Verify:
 python --version   # should print 3.11.x
 ```
 
-### 2. Node.js 18+
+### 2. Node.js 20.9+
 Download the **LTS** installer from <https://nodejs.org/> and install with defaults.
 Verify:
 ```powershell
@@ -150,12 +150,12 @@ pip install -r requirements.txt --extra-index-url https://download.pytorch.org/w
 ### 5. Compile the 3DGS CUDA extensions
 These must be built with the MSVC + CUDA toolchain. Open a **"x64 Native Tools Command Prompt for VS 2022"**, or initialize the environment manually, then activate the venv and build:
 
-```powershell
-# Load the MSVC build environment (adjust path if you installed full VS instead of Build Tools):
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+```bat
+rem Load the MSVC build environment (adjust path for a full Visual Studio install):
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 
 cd C:\Users\<you>\Documents\wound-splat\backend
-.\venv\Scripts\Activate.ps1
+call venv\Scripts\activate.bat
 set DISTUTILS_USE_SDK=1
 
 cd ..\gaussian-splatting\submodules\diff-gaussian-rasterization
@@ -170,11 +170,11 @@ Verify both imported cleanly:
 python -c "import diff_gaussian_rasterization, simple_knn; print('CUDA extensions OK')"
 ```
 
-> **Note:** `gaussian-splatting/SIBR_viewers/`, `submodules/diff-gaussian-rasterization/third_party/`, and `submodules/fused-ssim/` are excluded from this repo (large vendor code). Clone them from the official [graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting) repo only if you need the desktop SIBR viewer — they are **not** required for the core pipeline.
+> **Fresh-clone prerequisite:** the rasterizer's `third_party/glm/` headers are excluded from Git but required by its build script. Restore the matching upstream headers before compiling, using the [upstream repository](https://github.com/graphdeco-inria/gaussian-splatting) and its submodule revisions. The excluded desktop `SIBR_viewers/` is optional; it is separate from these build dependencies.
 
 ### 6. Initialize the database
 ```powershell
-cd ..\..\backend
+cd ..\..\..\backend
 python init_db.py
 ```
 This creates the SQLite database (`woundsplat.db` by default).
@@ -198,14 +198,32 @@ The backend resolves all paths automatically relative to the project root. Overr
 
 ## Running the System
 
+### Tissue analysis setup
+
+From the repository root, create the separate tissue environment:
+
+```powershell
+py -3.11 -m venv tissue-venv
+.\tissue-venv\Scripts\python.exe -m pip install -r tissue/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126
+```
+
+Supply the trained checkpoint at `tissue/checkpoints/tissue_official_split.pt`.
+It is not included in Git. The backend invokes `tissue.segment_image` through
+this environment; the dataset is needed for training, not for inference.
+See [tissue setup](tissue/README.md) for data access and training instructions.
+
+### Start the application
+
 Two terminals are required. The frontend proxies all `/api/*` requests to the backend on port **8000** (configured in `frontend/next.config.ts`), so both must be running.
 
 **Terminal 1 — Backend (FastAPI, port 8000)**
-```powershell
-# Load the MSVC environment so the CUDA extensions can be imported at runtime:
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+Open Command Prompt (`cmd.exe`) at the repository root:
+
+```bat
+rem Load the MSVC environment so the CUDA extensions can be imported at runtime:
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 cd backend
-.\venv\Scripts\Activate.ps1
+call venv\Scripts\activate.bat
 uvicorn main:app --reload --port 8000
 ```
 
@@ -242,12 +260,16 @@ Processing time: ~30–60 minutes per scan depending on GPU and video length.
 
 ## Project Structure
 
-Research material in `docs/`, `experiments/`, `tools/thesis/`, and
-`tissue/results/`, along with thesis drafts and generated document previews,
-is kept locally and excluded from Git. References to those paths describe
-local research artifacts that are not included in a fresh clone. Tissue source
-code, tests, and runtime configuration remain tracked because the application
-depends on them; datasets and trained weights must be supplied separately.
+Research material in `docs/`, `experiments/`, and `tissue/results/` is kept
+locally and excluded from Git. These folders are not included in a fresh clone
+and are not required to run the application. Root-level thesis Word documents
+and the thesis-editing utilities in `tools/thesis/` were removed during cleanup;
+the ignore rules also exclude future copies and generated document previews.
+
+Tissue source code, tests, and runtime configuration remain tracked because the
+application depends on them. Datasets, trained weights, virtual environments,
+uploads, and generated scan outputs are excluded and must be supplied or
+generated separately. Keep backups of research evidence and model checkpoints.
 
 ```
 wound-splat/
@@ -268,11 +290,20 @@ wound-splat/
 │       ├── patient/           Patient portal
 │       ├── admin/              Clinical admin dashboard
 │       └── viewer/[scanId]/    Interactive 3D point cloud viewer
-└── gaussian-splatting/        3DGS pipeline (graphdeco-inria) + custom scripts
-    ├── wound_segment.py        Wound tissue segmentation
-    ├── estimate_scale.py       Absolute-scale calibration from a card/coin in frame
-    ├── wound_measure.py        Reference-plane wound measurement (Open3D)
-    └── validate_accuracy.py    Accuracy validation against synthetic wound phantoms
+├── gaussian-splatting/        3DGS pipeline + custom measurement scripts
+│   ├── wound_segment.py      Isolate the wound in a 3D point cloud
+│   ├── estimate_scale.py     Card/coin scale calibration
+│   ├── wound_measure.py      Reference-plane wound measurement
+│   ├── validate_accuracy.py  Synthetic geometry validation
+│   └── validate_salve.py     SALVE scanner surface comparison
+├── tissue/                   Separate 2D tissue segmentation package
+│   ├── segment_image.py      Inference entry point used by the backend
+│   ├── lib/                  Model, data, inference, training and metrics
+│   ├── configs/stats.json    Required normalization and class-weight config
+│   ├── compare_models.py     Paired five-fold architecture comparison
+│   └── tests/                Tissue regression tests
+├── deploy/                   Linux GPU pod scripts
+└── CITATIONS.md              Dataset and software attribution
 ```
 
 ---
@@ -291,6 +322,21 @@ wound-splat/
 
 ## Validation
 
+### Regression tests
+
+Run from the repository root with the existing environments (`pytest` must
+also be installed in the backend environment):
+
+```powershell
+.\backend\venv\Scripts\python.exe -m pytest backend/tests -q
+.\tissue-venv\Scripts\python.exe -m pytest tissue/tests -q
+node --test frontend/src/app/tissue/[scanId]/selection.test.mjs
+```
+
+These test code behavior; passing them does not establish clinical accuracy.
+The architecture comparison runner is `python -m tissue.compare_models` in the
+tissue environment. It writes results to the ignored experiments directory.
+
 ### Measurement geometry (automated)
 
 `python gaussian-splatting/validate_accuracy.py` generates synthetic wound phantoms — craters of known opening area, cavity volume, depth and extents, rotated and noised — and runs the real `wound_measure.py` on them:
@@ -305,13 +351,24 @@ wound-splat/
 
 This validates the measurement math, **not** the 3D reconstruction. End-to-end accuracy also depends on capture quality and scale calibration.
 
-### Full pipeline (physical) — not yet performed
+### SALVE surface comparison
 
-> **Status: outstanding.** No end-to-end accuracy figure exists for this project.
+[validate_salve.py](gaussian-splatting/validate_salve.py) compares reconstructed
+surfaces with SALVE scanner ground truth, using the supplied transform and
+evaluation polygon. Runs without the official polygon are marked provisional.
+The local PIS3 study is recorded under `experiments/night2/`; those artifacts
+are intentionally excluded from Git. See [CITATIONS.md](CITATIONS.md) for SALVE.
+
+Surface agreement does not establish wound area, volume, or depth accuracy.
+The available PIS3 polygon bounds the scan region, not an independently
+annotated wound outline with clinical reference measurements.
+
+### Physical wound-measurement accuracy — still outstanding
+
+> **Status: outstanding.** End-to-end wound-measurement accuracy is not established.
 > Every number in the table above comes from computer-generated geometry handed
-> straight to `wound_measure.py`. The chain that actually runs in use — video →
-> COLMAP → 3DGS → measurement — has never been checked against an object whose
-> true size is known.
+> straight to `wound_measure.py`. SALVE surface comparisons are separate from
+> validation against independently measured wound area, volume and depth.
 >
 > This is the largest open gap in the project's validation. The section below is
 > the procedure for closing it, not a record of it having been done.
@@ -330,9 +387,9 @@ differs from the table in that script biases every millimetre by the same ratio.
 
 ## Known Limitations
 
-- **End-to-end measurement accuracy is unvalidated.** Only the measurement mathematics has been checked, against synthetic geometry. No physical object of known size has been run through the full pipeline — so the published 10% figure describes `wound_measure.py`, not the system. See [Validation](#validation)
-- **Tissue percentages depend on how the region is selected.** The tissue model was trained on images cropped tight to a wound and has no "not a wound" class, so a loosely drawn box pulls the percentages noticeably. The repeatability of this has not been measured. See `tissue/RESULTS.md`
-- **The tissue model has only three classes** — fibrin, granulation and callus. Shown necrotic tissue, eschar or slough it has no class to assign and no way to abstain, so it will apply one of its three labels anyway
+- **End-to-end wound-measurement accuracy is unvalidated.** The synthetic 10% tolerance describes the measurement routine, not the full system. SALVE surface comparisons do not supply clinical wound-dimension ground truth. See [Validation](#validation).
+- **Tissue percentages depend on region selection.** The model was trained on tightly cropped wound images. A background class and a low-wound-fraction rejection rule exist, but neither guarantees reliable behavior on wider photographs. See [tissue results](tissue/RESULTS.md).
+- **The tissue model has three tissue classes plus background** — fibrin, granulation and callus. It has no dedicated necrosis, eschar, slough, tendon or bone label and no general unknown-tissue detector.
 - Single-user, local execution — no concurrent scan processing (single GPU)
 - Absolute scale requires a bank card or coin placed flat next to the wound during capture; without one (or when detection refuses), measurements fall back to an uncalibrated 1 unit = 1 cm assumption and are flagged as approximate in the viewer
 - Depth and volume need 1–2 cm of healthy skin around the wound in frame — the reference plane is fitted to that margin
@@ -346,6 +403,10 @@ differs from the table in that script biases every millimetre by the same ratio.
 This project builds on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting) (Kerbl et al., SIGGRAPH 2023), used under its original license (see `gaussian-splatting/LICENSE.md`).
 
 ## Citation
+
+Dataset references, software papers, project usage and permission records are
+listed in [CITATIONS.md](CITATIONS.md). Cite the original sources when reporting
+results; local experiment outputs are not published benchmark results.
 
 ```
 Kerbl, B., Kopanas, G., Leimkühler, T., & Drettakis, G. (2023).
