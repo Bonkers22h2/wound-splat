@@ -1,9 +1,0 @@
-WOUND-SPLAT MEASUREMENT RESULTS
-========================================
-Surface Area : 29.63 cm2 (planar opening)
-Volume       : 29.42 cm3
-Max Depth    : 16.56 mm
-Width        : 6.68 cm (minor axis)
-Height       : 7.61 cm (major axis)
-Bed 3D area  : 55.39 cm2
-Scale        : 2.2563 cm/unit (calibrated)

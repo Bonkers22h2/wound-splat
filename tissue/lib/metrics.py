@@ -103,3 +103,11 @@ class ScoreAccumulator:
 
     def mean_tissue_dice(self):
         return mean_tissue_dice(self.dice())
+
+    def counts(self):
+        """Return mergeable pixel counts for pooled cross-validation scores."""
+        return {
+            "intersection": self._intersection.tolist(),
+            "predicted": self._pred_count.tolist(),
+            "target": self._target_count.tolist(),
+        }

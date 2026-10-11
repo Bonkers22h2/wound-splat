@@ -242,6 +242,13 @@ Processing time: ~30–60 minutes per scan depending on GPU and video length.
 
 ## Project Structure
 
+Research material in `docs/`, `experiments/`, `tools/thesis/`, and
+`tissue/results/`, along with thesis drafts and generated document previews,
+is kept locally and excluded from Git. References to those paths describe
+local research artifacts that are not included in a fresh clone. Tissue source
+code, tests, and runtime configuration remain tracked because the application
+depends on them; datasets and trained weights must be supplied separately.
+
 ```
 wound-splat/
 ├── backend/                  FastAPI app, database, pipeline

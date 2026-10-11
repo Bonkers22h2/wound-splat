@@ -14,6 +14,41 @@ import segmentation_models_pytorch as smp
 ENCODER = "mit_b3"
 DECODER_ATTENTION = "scse"
 
+ARCHITECTURES = (
+    "mit_b3_unet_scse",
+    "resnet34_unet",
+    "resnet34_deeplabv3plus",
+)
+
+
+def build_model_for_architecture(name, num_classes=4, pretrained=True):
+    """Build one of the architectures used in the controlled comparison."""
+    encoder_weights = "imagenet" if pretrained else None
+
+    if name == "mit_b3_unet_scse":
+        return smp.Unet(
+            encoder_name=ENCODER,
+            encoder_weights=encoder_weights,
+            decoder_attention_type=DECODER_ATTENTION,
+            in_channels=3,
+            classes=num_classes,
+        )
+    if name == "resnet34_unet":
+        return smp.Unet(
+            encoder_name="resnet34",
+            encoder_weights=encoder_weights,
+            in_channels=3,
+            classes=num_classes,
+        )
+    if name == "resnet34_deeplabv3plus":
+        return smp.DeepLabV3Plus(
+            encoder_name="resnet34",
+            encoder_weights=encoder_weights,
+            in_channels=3,
+            classes=num_classes,
+        )
+    raise ValueError(f"unknown architecture: {name}")
+
 
 def build_model(num_classes=4, pretrained=True):
     """Build the segmentation model.
@@ -22,10 +57,6 @@ def build_model(num_classes=4, pretrained=True):
     here: there are only 78 training images, far too few to learn general
     visual features from scratch. Tests pass False to avoid a download.
     """
-    return smp.Unet(
-        encoder_name=ENCODER,
-        encoder_weights="imagenet" if pretrained else None,
-        decoder_attention_type=DECODER_ATTENTION,
-        in_channels=3,
-        classes=num_classes,
+    return build_model_for_architecture(
+        "mit_b3_unet_scse", num_classes=num_classes, pretrained=pretrained
     )
