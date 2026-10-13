@@ -1,5 +1,6 @@
 # Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -46,14 +47,17 @@ Thumbs.db
 # The DFUTissue data was granted for nonprofit academic use with NO
 # REDISTRIBUTION (Prof. Zeyun Yu, 2026-09-04 — see docs/permissions/).
 # THIS REPOSITORY IS PUBLIC, so the rule below denies everything under tissue/
-# by default and allows only source code and notes back in. A new image, mask
+# by default and allows only source code, runtime config and notes back in. A new image, mask
 # or checkpoint therefore cannot be committed by accident.
 tissue/**
-!tissue/**/
-!tissue/**/*.py
-!tissue/**/*.md
-!tissue/configs/*.json
-!tissue/results/*.json
+!tissue/*.py
+!tissue/*.md
+!tissue/lib/
+!tissue/lib/*.py
+!tissue/tests/
+!tissue/tests/*.py
+!tissue/configs/
+!tissue/configs/stats.json
 !tissue/requirements.txt
 
 # Dataset material and annotation work must always remain local.
@@ -63,6 +67,7 @@ tissue/**
 /tissue/checkpoints/
 /tissue/outputs/
 /tissue/datasets/
+/tissue/results/
 /tissue/**/[Ll]abeled/
 /tissue/**/[Uu]nlabeled/
 /tissue/**/[Uu]nlabelled/
@@ -79,9 +84,20 @@ tissue-venv/
 # Misc
 filelist.txt
 wound_salve.mp4
-data/ 
-data/ 
-gaussian-splatting/SIBR_viewers/ 
-gaussian-splatting/submodules/diff-gaussian-rasterization/third_party/ 
-gaussian-splatting/submodules/fused-ssim/ 
-wound_splat_documentation.docx
+data/
+gaussian-splatting/SIBR_viewers/
+gaussian-splatting/submodules/diff-gaussian-rasterization/third_party/
+gaussian-splatting/submodules/fused-ssim/
+
+# Local research, thesis drafts, permissions and experiment outputs
+/docs/
+/experiments/
+/tools/thesis/
+/*.docx
+/*_workplan_*.png
+
+# Generated document previews and QA scratch directories
+/_qa_*/
+/qa_*/
+/rendered_*/
+/*_render_check/

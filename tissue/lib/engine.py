@@ -43,7 +43,10 @@ def build_loss(device):
     return loss_fn
 
 
-def run_training(train_pairs, eval_pairs, seed, device, epochs=EPOCHS, on_epoch=None):
+def run_training(
+    train_pairs, eval_pairs, seed, device, epochs=EPOCHS, on_epoch=None,
+    model_factory=build_model,
+):
     """Train from ImageNet weights and score on `eval_pairs`.
 
     Runs a fixed number of epochs and returns the final weights — there is no
@@ -57,7 +60,7 @@ def run_training(train_pairs, eval_pairs, seed, device, epochs=EPOCHS, on_epoch=
     )
     eval_loader = DataLoader(TissueDataset(eval_pairs), batch_size=BATCH_SIZE)
 
-    model = build_model(num_classes=4, pretrained=True).to(device)
+    model = model_factory(num_classes=4, pretrained=True).to(device)
     loss_fn = build_loss(device)
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
@@ -101,4 +104,5 @@ def evaluate(model, loader, device, num_classes=4):
         "dice": accumulator.dice(),
         "iou": accumulator.iou(),
         "mean_tissue_dice": accumulator.mean_tissue_dice(),
+        "counts": accumulator.counts(),
     }

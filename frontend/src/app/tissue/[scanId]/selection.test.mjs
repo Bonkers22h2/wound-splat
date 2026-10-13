@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { drawBox, moveBox, resizeBox } from './selection.mjs'
+import { drawBox, imageNaturalSize, moveBox, resizeBox } from './selection.mjs'
+
+test('a cached image that already completed exposes its natural dimensions', () => {
+  assert.deepEqual(imageNaturalSize({ complete: true, naturalWidth: 1080, naturalHeight: 1920 }),
+    { width: 1080, height: 1920 })
+  assert.equal(imageNaturalSize({ complete: false, naturalWidth: 1080, naturalHeight: 1920 }), null)
+  assert.equal(imageNaturalSize({ complete: true, naturalWidth: 0, naturalHeight: 0 }), null)
+})
 
 test('drawing backwards produces the same original-image coordinates', () => {
   assert.deepEqual(drawBox({ x: 800, y: 900 }, { x: 100, y: 200 }),
