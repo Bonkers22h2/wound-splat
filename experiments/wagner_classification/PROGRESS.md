@@ -92,3 +92,43 @@
   remains on `main` with the same nine unrelated tissue edits; implementation
   stays on `codex/wagner-mobilenetv2` in the managed worktree. Code/docs are ready
   for the implementation commit; datasets and run artifacts stay ignored.
+
+## 2026-10-21 — real training requested and completed
+
+- User instruction: "then train them" after seeing synthetic example outputs.
+  Ruling: perform the real exploratory baseline and a full-data research fit;
+  do not stop at creating another training command or wait for an email reply.
+- Identified the original gate as conflating uncertain identity with no-split
+  constraints. Ruling before observing scores: introduce an explicit
+  `conservative-splits` policy, preserve every old split union, keep grade-scoped
+  source samples distinct, and still reject exact-image conflicting labels.
+  No relabeling, exclusions, threshold relaxation or adjudication claim.
+- Four new tests failed before the policy existed, then the combined suite
+  passed **35/35 in 10.46s**. One independent review found no code issues and
+  accepted the documented exploratory policy. Remaining data/clinical questions
+  are limitations, not resolved by that review.
+- New audit ready: 10,062 files, 1,794 export sample groups, 1,715 split groups,
+  40 unresolved mixed-grade candidates and zero exact conflicting-label groups.
+  Compared manifests: every image hash, path, grade and prior split constraint
+  preserved. Five valid folds, every grade present in every fold.
+- Five-fold CUDA training completed 100 total epochs. Pooled source-group
+  accuracy **59.09%**, macro F1 **0.59238**; individual-image accuracy **57.32%**,
+  macro F1 **0.57564**. No tuning or best-fold selection followed these scores.
+- Verified full out-of-fold coverage, split isolation, exact metric
+  recomputation and source hashes. Four deterministic example checkpoint loads
+  reproduced GPU outputs. The initially too-strict CPU/GPU comparison failed;
+  diagnosis identified cuDNN TF32 differences (maximum 0.002781 in four scores).
+  Same-batch GPU outputs matched within 1e-6 and disabling TF32 brought CPU/GPU
+  differences below 9e-7. No training/results were modified to make this pass.
+- Full-data fit completed 20 epochs in 163.813 seconds; all 1,794 source groups
+  sampled each epoch. Verified frozen features against original ImageNet
+  weights, saved checkpoint metadata, checksum and successful prediction.
+- Full metrics, confusion matrix, four held-out examples including mistakes,
+  commands, checksum and limitations recorded in TRAINING_20261021.md. Updated
+  README/model card/data review/results to distinguish current results from
+  the historical blocked strict audit and synthetic test.
+- The final documentation save was interrupted by an automatic-approval usage
+  limit after training and checkpoint verification completed. On the user's
+  request to continue, the documentation was completed; no retraining needed.
+- No deployment, publication or main-branch changes by this task. Raw data,
+  per-image results, all six trained checkpoints and logs remain ignored/local.

@@ -86,3 +86,22 @@ containing more than one grade. Cross-grade edges were counted from
 
 No patient/wound mapping was supplied. Conservative image splitting can reduce
 duplicate leakage but cannot guarantee patient-independent evaluation.
+
+## 2026-10-21: separate sample and split grouping
+
+New audit `data/wagner/audit-conservative-v2` uses the explicit
+`conservative-splits` policy described in TRAINING_20261021.md. It is ready for
+the exploratory experiment, with 1,794 export sample groups (450/448/446/450
+by grade), 1,715 split groups, zero conflicting exact-image sample groups and
+40 unresolved mixed-grade candidate groups retained as warnings. The latter
+remain together across folds, including all 15 candidate overlaps between
+original splits.
+
+Manifest fingerprint:
+`7004aee3c4b507b8517fb711f7cc534d47f9ca4b14d3ad8b22073b6816269720`.
+
+A direct comparison with the old manifest verified every original path, grade
+and file SHA256 is unchanged and every old split group maps wholly into one
+new split group. Five folds are feasible, each with 89–90 sample groups per
+grade (358–359 total groups per fold). No data were relabeled, excluded or
+declared clinically verified by this change. Old audit evidence is preserved.

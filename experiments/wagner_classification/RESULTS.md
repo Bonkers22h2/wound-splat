@@ -1,5 +1,34 @@
 # Results and verification record
 
+## Latest real-data result — 2026-10-21
+
+The user subsequently requested actual training. The documented
+`conservative-splits` policy retains all uncertain-match fold constraints while
+keeping differently labeled samples separate; it enabled the exploratory run
+without relabeling or excluding images. The historical strict audit below is
+preserved, not retrospectively declared resolved.
+
+Five-fold, 20-epoch MobileNetV2 evaluation completed on CUDA:
+
+- Export-source groups: **59.09% accuracy, 0.59238 macro F1**, 1,794 groups.
+- Individual exported images: **57.32% accuracy, 0.57564 macro F1**, 10,062 files.
+- Per-grade F1: grade 1 **0.58864**, grade 2 **0.56667**, grade 3 **0.53446**,
+  grade 4 **0.67977**.
+- Fold macro-F1 mean **0.59053**, standard deviation **0.01323**; no confidence
+  interval or clinical-validation claim.
+
+See [the complete training record](TRAINING_20261021.md) for the protocol change,
+confusion matrix, honest held-out examples, runtime, numerical checks and
+remaining limitations. All source hashes, split assignments and predictions
+are retained in the ignored local run directory. The 35-test combined suite
+passed before real training, and independent review accepted the grouping
+change without code findings.
+
+The full-data research checkpoint also completed its 20 epochs and passed
+loading/inference and frozen-backbone checks. It has no separate independent
+accuracy estimate. Its path, checksum and verification record are documented
+in TRAINING_20261021.md.
+
 ## 2026-10-20: implementation, not a clinical experiment result
 
 ADPM training: **not run**. The conservative audit returned `blocked` with 40

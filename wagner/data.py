@@ -106,12 +106,14 @@ def read_groups(path):
         return result
 
 
-def audit_dataset(root, output, groups_csv=None, near_distance=4):
+def audit_dataset(root, output, groups_csv=None, near_distance=4, grouping_policy="strict"):
     root, output = Path(root).resolve(), Path(output).resolve()
     if not root.is_dir():
         raise ValueError(f"Dataset directory does not exist: {root}")
     if not 0 <= near_distance <= 8:
         raise ValueError("near_distance must be between 0 and 8.")
+    if grouping_policy not in ("strict", "conservative-splits"):
+        raise ValueError("grouping_policy must be strict or conservative-splits.")
     if output.exists():
         raise FileExistsError(f"Choose a new audit directory: {output}")
     records, errors = [], []
@@ -146,8 +148,16 @@ def audit_dataset(root, output, groups_csv=None, near_distance=4):
         errors.append("No valid grade 1–4 images found.")
 
     uf, tree = UnionFind(len(records)), HashTree()
-    seen, links = {}, []
+    sample_uf = UnionFind(len(records))
+    seen, sample_seen, links = {}, {}, []
     for i, row in enumerate(records):
+        # Sample identity is narrower than the conservative no-split constraint.
+        for key in (("export_source", row["grade"], row["source_id"]),
+                    ("exact_pixels", row["invariant_sha256"])):
+            if key in sample_seen:
+                sample_uf.join(i, sample_seen[key])
+            else:
+                sample_seen[key] = i
         for kind in ("source_id", "invariant_sha256"):
             key = (kind, row[kind])
             if key in seen:
@@ -161,9 +171,19 @@ def audit_dataset(root, output, groups_csv=None, near_distance=4):
                 links.append({"a": records[old]["path"], "b": row["path"],
                               "reason": "perceptual_candidate", "distance": distance})
                 uf.join(i, old)
+    candidates = defaultdict(list)
+    for i in range(len(records)):
+        candidates[f"candidate-{uf.find(i):06d}"].append(i)
+    candidate_conflicts = [
+        {"candidate_group": group, "grades": sorted({records[i]["grade"] for i in members}),
+         "paths": [records[i]["path"] for i in members]}
+        for group, members in candidates.items()
+        if len({records[i]["grade"] for i in members}) > 1
+    ]
+    identity = uf if grouping_policy == "strict" else sample_uf
     inferred = defaultdict(list)
     for i, row in enumerate(records):
-        row["image_group"] = f"image-{uf.find(i):06d}"
+        row["image_group"] = f"image-{identity.find(i):06d}"
         inferred[row["image_group"]].append(i)
     conflicts = []
     for group, indices in inferred.items():
@@ -193,7 +213,7 @@ def audit_dataset(root, output, groups_csv=None, near_distance=4):
     for i, row in enumerate(records):
         row["split_group"] = f"split-{uf.find(i):06d}"
     overlap = sum(len({records[i]["source_split"] for i in members}) > 1
-                  for members in inferred.values())
+                  for members in candidates.values())
     audit = {
         "status": "blocked" if errors else "ready",
         "files": len(records),
@@ -205,14 +225,20 @@ def audit_dataset(root, output, groups_csv=None, near_distance=4):
         "source_split_counts": dict(Counter(r["source_split"] for r in records)),
         "source_split_overlap_groups": overlap,
         "conflicting_image_groups": len(conflicts),
+        "grouping_policy": grouping_policy,
+        "candidate_mixed_grade_groups": len(candidate_conflicts),
         "patient_groups_supplied": groups_csv is not None,
         "near_distance": near_distance,
         "errors": errors,
+        "warnings": ([f"{len(candidate_conflicts)} mixed-grade candidate groups remain unresolved; "
+                      "all candidate links are retained as split constraints."]
+                     if candidate_conflicts and grouping_policy == "conservative-splits" else []),
         "limitations": [
             "Image grouping is conservative; perceptual candidates can be false matches and can miss duplicates.",
             "Distinct source names or image clusters do not establish independent patients.",
             "Expert validation is user-reported; review documentation was not supplied.",
             "Grades 0 and 5 and clinical findings invisible in photographs are not assessed.",
+            "Sample groups are inferred export units, not verified independent wounds; same-grade stem collisions remain possible.",
         ],
     }
     payload = {"schema_version": 1, "root": str(root), "records": records, "audit": audit}
@@ -222,6 +248,7 @@ def audit_dataset(root, output, groups_csv=None, near_distance=4):
     write_json(output / "audit.json", audit)
     write_json(output / "duplicate_links.json", links)
     write_json(output / "label_conflicts.json", conflicts)
+    write_json(output / "candidate_groups.json", candidate_conflicts)
     return payload
 
 

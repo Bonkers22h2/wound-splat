@@ -123,3 +123,49 @@ def test_manifest_tampering_is_rejected(tmp_path):
     path.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match="fingerprint"):
         api().load_manifest(path)
+
+
+def test_conservative_splits_keep_cross_grade_names_together_without_merging_samples(tmp_path):
+    root = tmp_path / "images"
+    picture(root / "train/Grade 1/shared_png.rf.one.png", 11)
+    picture(root / "train/Grade 1/shared_png.rf.two.png", 12)
+    picture(root / "test/Grade 2/shared_png.rf.three.png", 13)
+    result = api().audit_dataset(root, tmp_path / "audit", grouping_policy="conservative-splits")
+    assert result["audit"]["status"] == "ready"
+    assert result["audit"]["candidate_mixed_grade_groups"] == 1
+    assert len({r["split_group"] for r in result["records"]}) == 1
+    assert len({r["image_group"] for r in result["records"]}) == 2
+    assert result["audit"]["source_split_overlap_groups"] == 1
+    assert api().load_manifest(tmp_path / "audit/manifest.json")["audit"]["grouping_policy"] == "conservative-splits"
+
+
+def test_conservative_splits_still_block_exact_cross_grade_conflicts(tmp_path):
+    root = tmp_path / "images"
+    picture(root / "Grade 1/a.png", 1)
+    picture(root / "Grade 2/b.png", 1)
+    result = api().audit_dataset(root, tmp_path / "audit", grouping_policy="conservative-splits")
+    assert result["audit"]["status"] == "blocked"
+    with pytest.raises(ValueError, match="blocked"):
+        api().load_manifest(tmp_path / "audit/manifest.json")
+
+
+def test_conservative_splits_keep_approximate_matches_separate_but_in_one_fold(tmp_path):
+    root = tmp_path / "images"
+    # Different uniform colors share a dHash, but are not identical pixels.
+    for grade in (1, 2):
+        folder = root / f"Grade {grade}"
+        folder.mkdir(parents=True)
+        Image.new("RGB", (32, 32), (grade * 50, 0, 0)).save(folder / f"{grade}.png")
+    result = api().audit_dataset(root, tmp_path / "audit", grouping_policy="conservative-splits")
+    assert result["audit"]["status"] == "ready"
+    assert len({r["image_group"] for r in result["records"]}) == 2
+    assert len({r["split_group"] for r in result["records"]}) == 1
+    assert any(link["reason"] == "perceptual_candidate"
+               for link in json.loads((tmp_path / "audit/duplicate_links.json").read_text()))
+
+
+def test_audit_rejects_unknown_grouping_policy(tmp_path):
+    root = tmp_path / "images"
+    picture(root / "Grade 1/a.png")
+    with pytest.raises(ValueError, match="grouping_policy"):
+        api().audit_dataset(root, tmp_path / "audit", grouping_policy="ignore-conflicts")

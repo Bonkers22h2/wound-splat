@@ -36,6 +36,14 @@ prevents them crossing folds. Mixed-label inferred groups require review;
 mixed-grade verified patient groups are possible (for example different visits).
 Do not treat image clusters as patient identifiers.
 
+**2026-10-21 protocol update:** the user requested real-data training. The
+explicit `conservative-splits` audit policy separates sample identity from
+split constraints. All prior suspect links still constrain folds. Sample groups
+use grade-scoped export stems and exact transformed pixels; mixed-grade weak
+candidates become unresolved warnings, while exact conflicting images remain
+blocking. The strict policy remains the default. See TRAINING_20261021.md for
+the decision made before observing model scores and remaining limitations.
+
 Store a versioned manifest, audit report, duplicate candidates and fold
 assignments locally. Bind runs to the manifest fingerprint and verify images
 have not changed. Raw images, per-image identifiers, checkpoints and generated

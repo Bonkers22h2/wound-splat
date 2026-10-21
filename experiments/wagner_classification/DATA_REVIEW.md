@@ -1,4 +1,13 @@
-# Review before real-data training
+# Data-identity review and exploratory grouping
+
+**2026-10-21 update:** the initial strict audit below remains blocked. An explicit
+`conservative-splits` exploratory policy now allows weak candidate groups to be
+used without identity adjudication by retaining all their split constraints
+and keeping differently labeled samples separate. No exact conflicting-label
+duplicates exist in this archive. The review below is still useful to improve
+identity/weighting and document expert coverage, but is no longer a prerequisite
+for this explicitly limited run. See TRAINING_20261021.md. Exact conflicting
+duplicates, unreadable files and invalid mappings remain blockers.
 
 The current audit deliberately stops training because its conservative grouping
 cannot distinguish reused filenames, visually similar but distinct photographs,

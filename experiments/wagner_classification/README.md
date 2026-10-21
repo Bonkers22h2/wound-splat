@@ -1,8 +1,14 @@
 # Wagner grade 1–4 classification experiment
 
-**Status, 2026-10-21:** implementation verified; ADPM training blocked by
-unresolved candidate source-group conflicts. No trained ADPM classifier or
-clinical performance claim is supplied. A synthetic workflow check passes.
+**Status, 2026-10-21:** real ADPM training and five-fold evaluation are complete.
+Export-source group accuracy is **59.09%**, macro F1 **0.59238**; individual
+exported-image accuracy is **57.32%**. A full-data research checkpoint is saved
+locally. These results show substantial error and do not establish clinical
+suitability. See [the complete run record](TRAINING_20261021.md).
+
+The explicit `conservative-splits` protocol keeps uncertain duplicate
+candidates together in folds without merging their labels. Exact conflicting
+duplicates still block. All 40 weak mixed-grade candidates remain unresolved.
 
 This standalone experiment learns photograph labels with **ImageNet-pretrained
 MobileNetV2**, a frozen feature extractor and a four-output classifier. It does
@@ -13,7 +19,8 @@ is whether this simple baseline generalizes across held-out image groups.
 
 - [Design and evaluation protocol](DESIGN.md)
 - [Dataset provenance and actual counts](DATASET.md)
-- [Review needed before training](DATA_REVIEW.md)
+- [Unresolved data-identity review](DATA_REVIEW.md)
+- [Real-data training protocol and results](TRAINING_20261021.md)
 - [Recorded verification and results](RESULTS.md)
 - [Model card and limitations](MODEL_CARD.md)
 - [Implementation plan](PLAN.md) and [decision/progress record](PROGRESS.md)
@@ -53,13 +60,22 @@ preserved. Accepted image parents are `Grade 1` through `Grade 4` or `1` through
 `4` (case insensitive; spaces, underscores and hyphens accepted after Grade).
 
 ```powershell
-python -m wagner audit --data 'C:\Users\bonkc\Documents\wound-splat\data\wagner\adpm' --output experiments/wagner_classification/audits/adpm-v1
+python -m wagner audit --data 'C:\Users\bonkc\Documents\wound-splat\data\wagner\adpm' --output experiments/wagner_classification/audits/adpm-conservative-v2 --grouping-policy conservative-splits
 ```
 
 Audit writes `manifest.json`, `audit.json`, `duplicate_links.json` and
-`label_conflicts.json`. A blocked audit exits with code 2 and still preserves
+`label_conflicts.json`, plus unresolved `candidate_groups.json`. A blocked audit exits with code 2 and still preserves
 the reports. Training refuses blocked manifests. Repeated commands must use
 a new output directory; existing evidence is never overwritten.
+
+The default policy is `strict`, which blocks mixed-grade candidate groups as
+well as exact conflicts. The real-data exploratory run explicitly uses
+`conservative-splits`: preserve every candidate link for splitting, but use
+grade-scoped source names/exact pixels for sampling and metric groups. Mixed
+weak candidates are warnings, not verified identity or label errors. This does
+not adjudicate them or guarantee patient independence. The verified manifest
+used for the recorded run is in the original checkout's
+`data/wagner/audit-conservative-v2/manifest.json`.
 
 An optional `--groups-csv groups.csv` supplies verified anonymized patient/wound
 groups. Include exactly one row for every image, with `path,group_id` columns.
@@ -73,10 +89,10 @@ distance, range 0–8). Zero still groups equal perceptual hashes. This paramete
 is not a shortcut around review: document threshold decisions before evaluating
 models. Similarity is a review aid, not proof of image or patient identity.
 
-## Train and evaluate, after the review
+## Train and evaluate
 
 ```powershell
-python -m wagner crossval --manifest experiments/wagner_classification/audits/reviewed-v1/manifest.json --config experiments/wagner_classification/config.json --output experiments/wagner_classification/runs/adpm-cv-v1 --device cpu
+python -m wagner crossval --manifest experiments/wagner_classification/audits/adpm-conservative-v2/manifest.json --config experiments/wagner_classification/config.json --output experiments/wagner_classification/runs/adpm-cv-v1 --device cpu
 ```
 
 Use `--device cuda` for a compatible available GPU. Default CPU thread count is
@@ -119,11 +135,20 @@ Undefined precision/recall/F1 use zero, and macro-F1 always averages four grades
 ## Full-data fit and prediction
 
 Full-data fitting is a separate, deliberate step after interpreting CV. It does
-not evaluate generalization. It was **not run** on ADPM during implementation.
+not evaluate generalization. The 2026-10-21 training request includes creating
+a research checkpoint; see the run record for its completion status.
 
 ```powershell
-python -m wagner fit --manifest experiments/wagner_classification/audits/reviewed-v1/manifest.json --output experiments/wagner_classification/runs/adpm-fit-v1 --device cpu
+python -m wagner fit --manifest experiments/wagner_classification/audits/adpm-conservative-v2/manifest.json --output experiments/wagner_classification/runs/adpm-fit-v1 --device cpu
 python -m wagner predict --checkpoint experiments/wagner_classification/runs/adpm-fit-v1/fit/model.pt --image path/to/wound.jpg
+```
+
+The completed local checkpoint is
+`experiments/wagner_classification/runs/adpm-fit-20261021/fit/model.pt`.
+To use that existing model:
+
+```powershell
+python -m wagner predict --checkpoint experiments/wagner_classification/runs/adpm-fit-20261021/fit/model.pt --image path/to/wound.jpg
 ```
 
 Prediction returns `predicted_grade`, four uncalibrated scores, checkpoint type,

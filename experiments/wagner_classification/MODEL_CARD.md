@@ -2,9 +2,12 @@
 
 ## Availability
 
-Code and training recipe are implemented. **No ADPM-trained checkpoint exists
-from this implementation session.** Only synthetic smoke checkpoints were
-produced, explicitly labeled `synthetic_smoke_only`. No model has been deployed.
+An ADPM-trained research checkpoint was completed on 2026-10-21, after the
+initial synthetic-only implementation. It is stored locally at
+`experiments/wagner_classification/runs/adpm-fit-20261021/fit/model.pt`.
+It uses all 1,794 inferred export sample groups for 20 epochs. Five separate CV
+checkpoints and complete held-out outputs are stored under `adpm-cv-20261021`.
+Neither data nor weights are committed or published. No model has been deployed.
 
 ## Intended use
 
@@ -40,14 +43,23 @@ selected final model.
 
 ## Evaluation and known limitations
 
-Planned evaluation: five grouped folds, fixed training duration and out-of-fold
+Completed evaluation: five grouped folds, fixed training duration and out-of-fold
 macro-F1, per-grade precision/recall/F1, accuracy and confusion matrix.
 Average exported-view probabilities within inferred image groups for primary
 metrics; also disclose file-level metrics. This group evaluation differs from
 single-photo use. There is no external validation, calibration study, validated
 confidence cutoff, subgroup fairness assessment or clinical utility study.
 
-Current data have unresolved identity candidates and no patient mapping.
+Source-group accuracy is 59.09%, macro F1 0.59238; individual exported-image
+accuracy is 57.32%, macro F1 0.57564. Per-grade group F1 is 0.58864 / 0.56667 /
+0.53446 / 0.67977 for grades 1 / 2 / 3 / 4. These results show substantial errors.
+Full-data fitting is not independently evaluated; its use of all images does
+not create additional test evidence. See TRAINING_20261021.md for details.
+
+Current data have 40 unresolved mixed-grade identity candidates and no patient mapping.
+The explicit conservative-splits policy preserves every candidate split link
+while keeping grade-scoped export source samples distinct; exact conflicting
+duplicates remain disallowed. This is not identity/label adjudication.
 Do not present augmented-file counts as numbers of independent wounds.
 Skin tone, camera, lighting, wound location, dressings, background and annotation
 method may affect results; those subgroup distributions have not been measured.
@@ -62,8 +74,9 @@ validation.
 
 ## Deployment and updates
 
-No automatic application integration or clinical diagnosis. Dataset adjudication
-and an interpretable baseline evaluation precede any fit for demonstration.
+No automatic application integration or clinical diagnosis. The full-data
+research checkpoint follows the documented baseline evaluation; identity and
+expert-review coverage still require review before stronger scientific claims.
 Clinical deployment would require separate clinical validation, governance
 and a defined clinician workflow. Future dataset/config changes must create new
 manifests and run directories. Never overwrite evidence or choose a CV fold

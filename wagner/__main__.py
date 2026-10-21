@@ -15,6 +15,8 @@ def main(argv=None):
     audit.add_argument("--output", required=True, type=Path)
     audit.add_argument("--groups-csv", type=Path, help="Optional full path,group_id patient mapping")
     audit.add_argument("--near-distance", type=int, default=4)
+    audit.add_argument("--grouping-policy", choices=("strict", "conservative-splits"), default="strict",
+                       help="Strict identity review, or retain uncertain matches as split constraints only")
     for name in ("crossval", "fit"):
         command = commands.add_parser(name, help="Grouped CV" if name == "crossval" else "Fit all data; no evaluation")
         command.add_argument("--manifest", required=True, type=Path)
@@ -30,7 +32,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "audit":
-            result = audit_dataset(args.data, args.output, args.groups_csv, args.near_distance)["audit"]
+            result = audit_dataset(args.data, args.output, args.groups_csv, args.near_distance,
+                                   args.grouping_policy)["audit"]
         else:
             import torch
             from .train import default_config, run_experiment, predict, smoke
