@@ -1,7 +1,9 @@
 import warnings
 
 import numpy as np
+from PIL import Image
 
+from tissue import compute_stats
 from tissue.lib.stats import class_weights
 
 
@@ -27,3 +29,21 @@ def test_a_class_with_no_pixels_gets_zero_weight_without_warning():
         weights = class_weights(counts)
 
     assert weights[1] == 0.0
+
+
+def test_training_statistics_exclude_held_out_image_and_mask(tmp_path):
+    pairs = []
+    for index, (brightness, label) in enumerate(((0, 0), (255, 1), (255, 3))):
+        image_path = tmp_path / f"image-{index}.png"
+        mask_path = tmp_path / f"mask-{index}.png"
+        Image.fromarray(np.full((2, 2, 3), brightness, dtype=np.uint8)).save(image_path)
+        Image.fromarray(np.full((2, 2), label, dtype=np.uint8)).save(mask_path)
+        pairs.append((image_path, mask_path))
+
+    statistics = compute_stats.calculate_training_statistics(pairs[:2])
+
+    assert statistics["normalization"] == {
+        "mean": [0.5, 0.5, 0.5], "std": [0.5, 0.5, 0.5],
+    }
+    assert statistics["class_weights"] == [1.0, 1.0, 0.0, 0.0]
+    assert statistics["train_pixel_counts"] == [65536, 65536, 0, 0]

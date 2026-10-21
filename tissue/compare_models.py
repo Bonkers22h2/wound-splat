@@ -17,11 +17,12 @@ import torch
 from tissue.lib.data import CONFIGS, load_split
 from tissue.lib.engine import BATCH_SIZE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY, run_training
 from tissue.lib.model import ARCHITECTURES, build_model_for_architecture
+from tissue.compute_stats import calculate_training_statistics
 
 CLASS_NAMES = ("background", "fibrin", "granulation", "callus")
 FOLDS = 5
 FOLD_SEED = 12345
-RESULTS_DIR = CONFIGS.parents[1] / "experiments" / "night2" / "tissue_comparison"
+RESULTS_DIR = CONFIGS.parents[1] / "experiments" / "tissue_comparison_fold_isolated"
 
 
 def make_folds(pairs, n_folds=FOLDS, seed=FOLD_SEED):
@@ -144,6 +145,13 @@ def run_comparison(epochs=EPOCHS, models=ARCHITECTURES, output_dir=RESULTS_DIR,
             raise ValueError(f"limit must be at least {FOLDS}")
         pooled = pooled[:limit]
     folds = make_folds(pooled)
+    fold_training = {}
+    fold_statistics = {}
+    for fold_number, held_out in enumerate(folds, start=1):
+        held_out_paths = {pair[0] for pair in held_out}
+        training = [pair for pair in pooled if pair[0] not in held_out_paths]
+        fold_training[fold_number] = training
+        fold_statistics[str(fold_number)] = calculate_training_statistics(training)
     fold_memberships = {
         str(index): [Path(pair[0]).name for pair in fold]
         for index, fold in enumerate(folds, start=1)
@@ -164,19 +172,27 @@ def run_comparison(epochs=EPOCHS, models=ARCHITECTURES, output_dir=RESULTS_DIR,
         "pretrained_encoder": pretrained,
         "selection": "final epoch; no early stopping or checkpoint selection",
         "primary_metric": "mean tissue Dice (background excluded)",
+        "statistics": "recomputed from each fold's training images only",
         "limit": limit,
     }
     result_path = Path(output_dir) / "results.json"
     if result_path.exists():
         existing = json.loads(result_path.read_text(encoding="utf-8"))
-        if existing.get("protocol") != protocol or existing.get("fold_memberships") != fold_memberships:
+        if (existing.get("protocol") != protocol
+                or existing.get("fold_memberships") != fold_memberships
+                or existing.get("fold_statistics") != fold_statistics):
             raise ValueError(
                 f"Existing results at {result_path} use a different protocol; "
                 "choose a new --output-dir to preserve them."
             )
         payload = existing
     else:
-        payload = {"protocol": protocol, "fold_memberships": fold_memberships, "models": {}}
+        payload = {
+            "protocol": protocol,
+            "fold_memberships": fold_memberships,
+            "fold_statistics": fold_statistics,
+            "models": {},
+        }
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     payload["device"] = device
@@ -190,8 +206,7 @@ def run_comparison(epochs=EPOCHS, models=ARCHITECTURES, output_dir=RESULTS_DIR,
             if key in model_result["folds"]:
                 print(f"{architecture} fold {fold_number}/{FOLDS}: already saved; skipping", flush=True)
                 continue
-            held_out_paths = {pair[0] for pair in held_out}
-            training = [pair for pair in pooled if pair[0] not in held_out_paths]
+            training = fold_training[fold_number]
             if device == "cuda":
                 torch.cuda.reset_peak_memory_stats()
             started = time.perf_counter()
@@ -212,6 +227,7 @@ def run_comparison(epochs=EPOCHS, models=ARCHITECTURES, output_dir=RESULTS_DIR,
             model, scores = run_training(
                 training, held_out, seed=0, device=device, epochs=epochs,
                 on_epoch=on_epoch, model_factory=factory,
+                statistics=fold_statistics[key],
             )
             minutes = (time.perf_counter() - started) / 60
             peak_memory = (

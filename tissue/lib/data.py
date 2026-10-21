@@ -102,11 +102,15 @@ class TissueDataset(Dataset):
     mask of class indices, which is what CrossEntropyLoss expects.
     """
 
-    def __init__(self, pairs, augment=False, size=IMAGE_SIZE, seed=0):
+    def __init__(self, pairs, augment=False, size=IMAGE_SIZE, seed=0, statistics=None):
         self.pairs = list(pairs)
         self.augment = augment
         self.size = size
-        self.mean, self.std = load_normalization()
+        if statistics is None:
+            self.mean, self.std = load_normalization()
+        else:
+            self.mean = np.array(statistics["normalization"]["mean"], dtype=np.float32)
+            self.std = np.array(statistics["normalization"]["std"], dtype=np.float32)
         self._rng = np.random.default_rng(seed)
 
     def __len__(self):

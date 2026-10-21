@@ -111,3 +111,56 @@ def test_run_training_keeps_existing_builder_as_default():
     ].default
 
     assert default_factory is engine.build_model
+
+
+def test_build_loss_uses_supplied_fold_class_weights():
+    logits = torch.tensor([[[[3.0, 3.0]], [[0.0, 0.0]], [[0.0, 0.0]], [[0.0, 0.0]]]])
+    targets = torch.tensor([[[0, 1]]])
+
+    background_priority = engine.build_loss(
+        "cpu", statistics={"class_weights": [10.0, 1.0, 0.0, 0.0]}
+    )(logits, targets)
+    fibrin_priority = engine.build_loss(
+        "cpu", statistics={"class_weights": [1.0, 10.0, 0.0, 0.0]}
+    )(logits, targets)
+
+    assert fibrin_priority > background_priority
+
+
+def test_run_training_uses_fold_statistics_without_global_file(tmp_path, monkeypatch):
+    from PIL import Image
+
+    import tissue.lib.data as data
+
+    pairs = []
+    for index in range(9):
+        image_path = tmp_path / f"image-{index}.png"
+        mask_path = tmp_path / f"mask-{index}.png"
+        Image.fromarray(np.full((2, 2, 3), 255 if index % 2 else 0, dtype=np.uint8)).save(image_path)
+        Image.fromarray(np.full((2, 2), index % 2, dtype=np.uint8)).save(mask_path)
+        pairs.append((image_path, mask_path))
+
+    def reject_global_stats():
+        raise AssertionError("cross-validation read the global statistics file")
+
+    monkeypatch.setattr(data, "load_normalization", reject_global_stats)
+
+    class TinyModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = torch.nn.Conv2d(3, 4, kernel_size=1)
+
+        def forward(self, images):
+            return self.conv(images)
+
+    model, scores = engine.run_training(
+        pairs[:8], pairs[8:], seed=0, device="cpu", epochs=1,
+        model_factory=lambda num_classes, pretrained: TinyModel(),
+        statistics={
+            "normalization": {"mean": [0.5] * 3, "std": [0.5] * 3},
+            "class_weights": [1.0, 1.0, 0.0, 0.0],
+        },
+    )
+
+    assert isinstance(model, TinyModel)
+    assert 0.0 <= scores["mean_tissue_dice"] <= 1.0

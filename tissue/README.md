@@ -82,6 +82,30 @@ Weights are inverse frequency rescaled to average 1, so fibrin counts about 28
 times more per pixel than background. Without this a model could score well by
 predicting "background" almost everywhere.
 
+### Fold-isolated model comparison
+
+The original `configs/stats.json` is for the authors' 78-image training split and
+for the deployed single-split model. The five-fold comparison now calculates
+normalization statistics and class weights separately from each fold's 88
+training images. Its 22 held-out images are never used to calculate those
+values. The runner passes the fold-specific values to both the training and
+evaluation datasets and to the training loss; it does not overwrite
+`configs/stats.json`.
+
+From the repository root, run the full comparison on the training GPU:
+
+```powershell
+.\tissue-venv\Scripts\python.exe -m tissue.compare_models
+```
+
+The command trains all three architectures for five folds and 80 epochs. It
+records each completed fold in `experiments/tissue_comparison_fold_isolated/`
+as `results.json` and `folds.csv`. Re-running the same command resumes missing
+folds. The output records the exact fold membership and the statistics used
+for each fold. The previous results in
+`experiments/night2/tissue_comparison/` are preserved for comparison, but
+their scores should not be copied into the thesis after the corrected run.
+
 ### Two properties that affect the code
 
 **Images are small and every one is a different size** — from 67×67 to 266×266

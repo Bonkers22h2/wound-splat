@@ -57,3 +57,47 @@ def test_summary_separates_fold_mean_from_pooled_pixel_metrics():
 
     assert summary["mean_tissue_dice"] == (0.875 + 1 / 3) / 2
     assert summary["pooled_pixel_metrics"]["mean_tissue_dice"] == (1.0 + 0.45 + 0.0) / 3
+
+
+def test_comparison_passes_training_only_statistics_to_each_fold(tmp_path, monkeypatch):
+    from PIL import Image
+
+    import tissue.compare_models as comparison
+
+    pairs = []
+    for index in range(5):
+        image_path = tmp_path / f"image-{index}.png"
+        mask_path = tmp_path / f"mask-{index}.png"
+        Image.fromarray(np.full((2, 2, 3), index * 50, dtype=np.uint8)).save(image_path)
+        Image.fromarray(np.full((2, 2), index if index < 4 else 0, dtype=np.uint8)).save(mask_path)
+        pairs.append((image_path, mask_path))
+
+    monkeypatch.setattr(comparison, "load_split", lambda split: pairs if split == "train" else [])
+    monkeypatch.setattr(comparison.torch.cuda, "is_available", lambda: False)
+    seen = []
+
+    def quick_training(training, held_out, **kwargs):
+        statistics = kwargs["statistics"]
+        assert len(training) == 4 and len(held_out) == 1
+        held_out_label = pairs.index(held_out[0])
+        if held_out_label in (1, 2, 3):
+            assert statistics["train_pixel_counts"][held_out_label] == 0
+        else:
+            assert statistics["train_pixel_counts"][0] == 65536
+        seen.append(held_out_label)
+        return None, {
+            "dice": [1.0] * 4, "iou": [1.0] * 4,
+            "mean_tissue_dice": 1.0,
+            "counts": {name: [1] * 4 for name in ("intersection", "predicted", "target")},
+        }
+
+    monkeypatch.setattr(comparison, "run_training", quick_training)
+    output_dir = tmp_path / "corrected-results"
+    result = comparison.run_comparison(
+        epochs=1, models=("mit_b3_unet_scse",), output_dir=output_dir,
+        pretrained=False,
+    )
+
+    assert sorted(seen) == list(range(5))
+    assert result["protocol"]["statistics"] == "recomputed from each fold's training images only"
+    assert (output_dir / "results.json").exists()

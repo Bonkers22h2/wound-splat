@@ -101,3 +101,20 @@ def test_dataset_yields_a_normalised_image_and_an_integer_class_mask():
 @needs_dataset
 def test_dataset_length_matches_the_split():
     assert len(TissueDataset(load_split("train"), augment=True)) == 78
+
+
+def test_dataset_uses_supplied_fold_normalization_for_held_out_image(tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "held-out.png"
+    mask_path = tmp_path / "held-out-mask.png"
+    Image.fromarray(np.full((2, 2, 3), 255, dtype=np.uint8)).save(image_path)
+    Image.fromarray(np.zeros((2, 2), dtype=np.uint8)).save(mask_path)
+
+    dataset = TissueDataset(
+        [(image_path, mask_path)],
+        statistics={"normalization": {"mean": [0.5] * 3, "std": [0.5] * 3}},
+    )
+
+    image, _ = dataset[0]
+    assert torch.all(image == 1.0)

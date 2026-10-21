@@ -30,9 +30,11 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def build_loss(device):
+def build_loss(device, statistics=None):
     """Class-weighted cross-entropy plus multiclass Dice."""
-    config = json.loads((CONFIGS / "stats.json").read_text())
+    config = statistics
+    if config is None:
+        config = json.loads((CONFIGS / "stats.json").read_text())
     weights = torch.tensor(config["class_weights"], dtype=torch.float32, device=device)
     cross_entropy = torch.nn.CrossEntropyLoss(weight=weights)
     dice = smp.losses.DiceLoss(mode="multiclass")
@@ -45,7 +47,7 @@ def build_loss(device):
 
 def run_training(
     train_pairs, eval_pairs, seed, device, epochs=EPOCHS, on_epoch=None,
-    model_factory=build_model,
+    model_factory=build_model, statistics=None,
 ):
     """Train from ImageNet weights and score on `eval_pairs`.
 
@@ -54,14 +56,16 @@ def run_training(
     data it is later scored on.
     """
     set_seed(seed)
+    train_dataset = TissueDataset(train_pairs, augment=True, seed=seed, statistics=statistics)
+    eval_dataset = TissueDataset(eval_pairs, statistics=statistics)
     train_loader = DataLoader(
-        TissueDataset(train_pairs, augment=True, seed=seed),
+        train_dataset,
         batch_size=BATCH_SIZE, shuffle=True, drop_last=True, num_workers=0,
     )
-    eval_loader = DataLoader(TissueDataset(eval_pairs), batch_size=BATCH_SIZE)
+    eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE)
 
     model = model_factory(num_classes=4, pretrained=True).to(device)
-    loss_fn = build_loss(device)
+    loss_fn = build_loss(device, statistics=statistics) if statistics is not None else build_loss(device)
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )

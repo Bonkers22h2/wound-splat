@@ -17,14 +17,17 @@ from tissue.lib.stats import class_weights
 CLASS_NAMES = ["background", "fibrin", "granulation", "callus"]
 
 
-def main():
+def calculate_training_statistics(pairs):
+    """Calculate preprocessing and loss weights from only the given pairs."""
+    pairs = list(pairs)
+    if not pairs:
+        raise ValueError("training statistics require at least one image")
     pixel_sum = np.zeros(3)
     pixel_sq_sum = np.zeros(3)
     pixel_total = 0
     counts = np.zeros(4, dtype=np.int64)
     images_containing = np.zeros(4, dtype=np.int64)
 
-    pairs = load_split("train")
     for image_path, mask_path in pairs:
         image = np.array(Image.open(image_path).convert("RGB"))
         mask = np.array(Image.open(mask_path))
@@ -50,7 +53,7 @@ def main():
         "num_classes": 4,
         "image_size": IMAGE_SIZE,
         "class_index_to_name": {str(i): n for i, n in enumerate(CLASS_NAMES)},
-        "source": "DFUTissue Original variant, training split only (78 images)",
+        "source": f"DFUTissue Original variant, {len(pairs)} training images only",
         "palette_note": (
             "names per the dataset's own Original/Palette/palette_colorCode.txt: "
             "Red - Fibrin, Green - Granulation, Blue - Callus"
@@ -62,18 +65,26 @@ def main():
         "class_weights": weights.round(4).tolist(),
     }
 
+    return config
+
+
+def main():
+    pairs = load_split("train")
+    config = calculate_training_statistics(pairs)
     CONFIGS.mkdir(exist_ok=True)
     out = CONFIGS / "stats.json"
     out.write_text(json.dumps(config, indent=2) + "\n")
 
     print(f"training images: {len(pairs)}")
-    print(f"mean: {mean.round(4).tolist()}")
-    print(f"std:  {std.round(4).tolist()}")
+    print(f"mean: {config['normalization']['mean']}")
+    print(f"std:  {config['normalization']['std']}")
     print(f"{'class':<14}{'pixels':>12}{'freq':>9}{'weight':>9}{'in images':>11}")
     for i, name in enumerate(CLASS_NAMES):
         print(
-            f"{name:<14}{counts[i]:>12,}{frequencies[i]:>9.4f}"
-            f"{weights[i]:>9.3f}{images_containing[i]:>8} /78"
+            f"{name:<14}{config['train_pixel_counts'][i]:>12,}"
+            f"{config['train_pixel_freq'][i]:>9.4f}"
+            f"{config['class_weights'][i]:>9.3f}"
+            f"{config['train_images_containing_class'][i]:>8} /{len(pairs)}"
         )
     print(f"\nwritten to {out}")
 
