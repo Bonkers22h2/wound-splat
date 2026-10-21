@@ -1,0 +1,7 @@
+# Baseline tested on Python 3.11. Install a matched PyTorch/torchvision pair
+# from https://pytorch.org/get-started/locally/ for the target CPU/CUDA platform.
+torch>=2.6,<3
+torchvision>=0.21,<1
+numpy>=1.26,<3
+Pillow>=10,<13
+pytest>=8,<10

@@ -92,6 +92,18 @@ gaussian-splatting/submodules/fused-ssim/
 # Local research, thesis drafts, permissions and experiment outputs
 /docs/
 /experiments/
+!/experiments/
+/experiments/*
+!/experiments/wagner_classification/
+/experiments/wagner_classification/*
+!/experiments/wagner_classification/*.md
+!/experiments/wagner_classification/config.json
+# Wagner source only; images, audit manifests and run outputs stay local.
+/wagner/**
+!/wagner/*.py
+!/wagner/requirements.txt
+!/wagner/tests/
+!/wagner/tests/*.py
 /tools/thesis/
 /*.docx
 /*_workplan_*.png

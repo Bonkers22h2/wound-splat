@@ -4,6 +4,10 @@
 
 Developed as a thesis project at the Technological Institute of the Philippines, College of Computer Science and Information Technology.
 
+The separate [Wagner grade 1–4 experiment](experiments/wagner_classification/README.md)
+provides dataset auditing, MobileNetV2 training and research evaluation. It is
+not integrated into the application's clinical reports.
+
 ---
 
 ## Overview

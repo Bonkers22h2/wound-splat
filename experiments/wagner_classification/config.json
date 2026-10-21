@@ -1,0 +1,13 @@
+{
+  "model": "mobilenet_v2",
+  "weights": "IMAGENET1K_V2",
+  "grades": [1, 2, 3, 4],
+  "image_size": 224,
+  "folds": 5,
+  "seed": 20261020,
+  "epochs": 20,
+  "batch_size": 16,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "frozen_backbone": true
+}
