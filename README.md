@@ -371,6 +371,12 @@ has been applied, and withheld-phantom/clinical validation remains outstanding.
 Run `python benchmarks/salve/run_study.py` with the local SALVE data and saved
 PIS3 reconstruction to reproduce it.
 
+An [experimental opening correction](benchmarks/salve/OPENING_FIX.md) raises
+PIS3 opening Dice from 31.18% to 84.44% against the draft outline. It is available
+through `wound_measure.py --boundary-mode auto`; the application retains the
+default geometric mode. Area remains overestimated, width worsens, and depth
+and volume are unchanged. This single development case is not a dataset score.
+
 ### Physical wound-measurement accuracy — still outstanding
 
 > **Status: outstanding.** End-to-end wound-measurement accuracy is not established.

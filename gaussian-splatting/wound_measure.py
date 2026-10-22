@@ -14,7 +14,11 @@ Steps:
   3. Cavity isolation: points deeper below the plane than the fit noise.
   4. Heightfield: cavity points are rasterized on the plane into a grid of
      per-cell median depths (holes filled from neighbours).
-  5. Metrics: planar opening area, integrated cavity volume, max depth, and
+  5. Opening (experimental --boundary-mode auto): with usable RGB, separate saturated wound-colored
+     tissue from surrounding blush using an adaptive color boundary. This
+     defines area and axes independently of which points form a depression.
+     Depth/volume still use the cavity geometry; color does not validate them.
+  6. Metrics: planar opening area, integrated cavity volume, max depth, and
      PCA-aligned width/height — all scaled by --scale (cm per cloud unit).
 
 Stdout labels ("Surface Area", "Volume", "Max Depth", "Width", "Height") are
@@ -53,6 +57,42 @@ MIN_WOUND_POINTS = 50
 # Heightfield cell size = this x median NN distance, grid clamped to a sane range.
 CELL_NN_MULT = 3.0
 MAX_GRID = 256
+
+
+def _color_opening_mask(colors: np.ndarray) -> np.ndarray:
+    """Red-tissue candidate mask with Otsu saturation separation from blush.
+
+    Uses the segmentation stage's red hue bands and 60/255 saturation floor.
+    Otsu is calculated only within those candidates, so extra nonred skin does
+    not change its histogram. This heuristic does not identify all wound types
+    (e.g. pale slough or black eschar); it is not a trained wound segmenter.
+    """
+    colors = np.asarray(colors, dtype=float)
+    if colors.ndim != 2 or colors.shape[1] != 3 or not np.isfinite(colors).all():
+        raise ValueError('Expected finite RGB colors')
+    colors = np.clip(colors, 0., 1.)
+    maximum, minimum = colors.max(axis=1), colors.min(axis=1)
+    delta = maximum - minimum
+    saturation = np.divide(delta, maximum, out=np.zeros(len(colors)), where=maximum > 0)
+    # Only red-max colors can fall in either red hue band.
+    hue = np.mod(np.divide(colors[:, 1] - colors[:, 2], 6 * delta,
+                           out=np.zeros(len(colors)), where=delta > 0), 1.)
+    red = ((colors[:, 0] == maximum) & (delta > 0) &
+           ((hue <= 15/180) | (hue >= 170/180)) & (saturation >= 60/255))
+    values = saturation[red]
+    if len(values) < MIN_WOUND_POINTS:
+        return np.zeros(len(colors), dtype=bool)
+    # Do not split a uniformly colored wound because of quantization noise.
+    if np.ptp(values) < .1:
+        return red
+    histogram, _ = np.histogram(values, bins=256, range=(0., 1.))
+    probability = histogram / histogram.sum()
+    weight = np.cumsum(probability)
+    moment = np.cumsum(probability * np.arange(256))
+    variance = np.divide((moment[-1] * weight - moment)**2, weight * (1-weight),
+                         out=np.zeros(256), where=(weight > 0) & (weight < 1))
+    threshold = (int(np.argmax(variance)) + 1) / 256
+    return red & (saturation >= threshold)
 
 
 
@@ -207,7 +247,10 @@ def _heightfield(uv: np.ndarray, depth: np.ndarray, cell: float):
     return depth_grid, filled, cell, in_footprint
 
 
-def measure_wound(ply_path: str, scale: float = 1.0) -> dict:
+def measure_wound(ply_path: str, scale: float = 1.0, boundary_mode: str = 'geometry',
+                  footprint_output: str | None = None) -> dict:
+    if boundary_mode not in ('auto', 'geometry'):
+        raise ValueError('boundary_mode must be auto or geometry')
     print("\n=== Wound-Splat Measurement Tool ===")
     print(f"Loading point cloud: {ply_path}")
 
@@ -264,9 +307,34 @@ def measure_wound(ply_path: str, scale: float = 1.0) -> dict:
     print(f"Grid: {depth_grid.shape[0]} x {depth_grid.shape[1]} cells, cell {cell:.5f} units")
     print(f"Footprint cells: {int(filled.sum())} ({int(in_footprint.sum())} points inside)")
 
+    # Keep opening and cavity definitions separate. Superficial/raised tissue
+    # remains part of the visible opening, even when it is above the skin plane.
+    opening, opening_cell, opening_origin = filled, cell, uv.min(axis=0)
+    boundary_source = 'geometry' if boundary_mode == 'geometry' else 'geometry_fallback'
+    if boundary_mode == 'auto' and pcd.has_colors():
+        color_mask = _color_opening_mask(np.asarray(pcd.colors))
+        if MIN_WOUND_POINTS <= color_mask.sum() < .8 * len(points):
+            opening_uv = np.column_stack([points[color_mask] @ u_axis, points[color_mask] @ v_axis])
+            _, candidate, candidate_cell, _ = _heightfield(
+                opening_uv, np.zeros(color_mask.sum()), CELL_NN_MULT * median_nn)
+            occupied_cells = np.argwhere(candidate)
+            scene_uv = np.column_stack([points @ u_axis, points @ v_axis])
+            crop_spanning = np.all(np.ptp(opening_uv, axis=0) >= .9 * np.ptp(scene_uv, axis=0))
+            if (len(occupied_cells) >= 3 and np.all(np.ptp(occupied_cells, axis=0) > 0)
+                    and not crop_spanning):
+                opening, opening_cell = candidate, candidate_cell
+                opening_origin = opening_uv.min(axis=0)
+                boundary_source = 'adaptive_color'
+    print(f'Opening boundary: {boundary_source}; depth/volume retain the geometric cavity definition')
+    if footprint_output is not None:
+        np.savez_compressed(footprint_output, mask=opening, cell=opening_cell,
+                            origin=opening_origin, u_axis=u_axis, v_axis=v_axis,
+                            normal=normal, plane_offset=offset, scale_cm_per_unit=scale,
+                            boundary_source=boundary_source)
+
     print("[5/5] Computing wound measurements...")
     cell_area = cell * cell
-    planar_area_cm2 = filled.sum() * cell_area * scale**2
+    planar_area_cm2 = opening.sum() * opening_cell**2 * scale**2
     volume_cm3 = float(depth_grid[filled].sum()) * cell_area * scale**3
     max_depth_mm = float(depth_grid[filled].max()) * scale * 10.0
 
@@ -279,13 +347,13 @@ def measure_wound(ply_path: str, scale: float = 1.0) -> dict:
     # Width/height along the wound's own principal axes, not the world box.
     # Measured on the footprint cells (already de-noised by the largest-blob
     # step), which track the opening rim better than raw point extremes.
-    cu, cv = np.nonzero(filled)
-    cell_xy = np.stack([cu + 0.5, cv + 0.5], axis=1) * cell
+    cu, cv = np.nonzero(opening)
+    cell_xy = np.stack([cu + 0.5, cv + 0.5], axis=1) * opening_cell
     cell_xy -= cell_xy.mean(axis=0)
     _, _, vt2 = np.linalg.svd(cell_xy, full_matrices=False)
     proj = cell_xy @ vt2.T
-    major_cm = float(proj[:, 0].max() - proj[:, 0].min() + cell) * scale
-    minor_cm = float(proj[:, 1].max() - proj[:, 1].min() + cell) * scale
+    major_cm = float(proj[:, 0].max() - proj[:, 0].min() + opening_cell) * scale
+    minor_cm = float(proj[:, 1].max() - proj[:, 1].min() + opening_cell) * scale
 
     print(f"\n{'=' * 40}")
     print("  WOUND MEASUREMENTS")
@@ -309,6 +377,7 @@ def measure_wound(ply_path: str, scale: float = 1.0) -> dict:
         f.write(f"Height       : {major_cm:.2f} cm (major axis)\n")
         f.write(f"Bed 3D area  : {bed_area_cm2:.2f} cm2\n")
         f.write(f"Scale        : {scale:.4f} cm/unit ({calibrated})\n")
+        f.write(f"Boundary     : {boundary_source}\n")
     print(f"Results saved to: {results_path}")
 
     return {
@@ -317,6 +386,7 @@ def measure_wound(ply_path: str, scale: float = 1.0) -> dict:
         "max_depth_mm": round(max_depth_mm, 2),
         "width_cm": round(minor_cm, 2),
         "height_cm": round(major_cm, 2),
+        "boundary_source": boundary_source,
     }
 
 
@@ -326,10 +396,15 @@ if __name__ == "__main__":
     parser.add_argument("--scale", default=1.0, type=float,
                         help="Centimeters per cloud unit (from reference-object "
                              "calibration; default 1.0 = legacy uncalibrated)")
+    parser.add_argument('--boundary-mode', choices=('auto', 'geometry'), default='geometry',
+                        help='auto: experimental adaptive red-tissue opening with RGB; '
+                             'geometry: default deepest-depression footprint')
+    parser.add_argument('--footprint-output', help='Optional NPZ opening mask for overlap evaluation')
     args = parser.parse_args()
 
     if not os.path.exists(args.ply):
         print(f"Error: File not found: {args.ply}")
         exit(1)
 
-    measure_wound(args.ply, scale=args.scale)
+    measure_wound(args.ply, scale=args.scale, boundary_mode=args.boundary_mode,
+                  footprint_output=args.footprint_output)

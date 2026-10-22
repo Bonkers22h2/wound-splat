@@ -137,7 +137,7 @@ def measure_reference(points_mm, annotation):
     Grid cells are centered inside the XY outline. For each, median depth of
     up to eight scanner samples within max_neighbor_mm suppresses scan noise.
     No samples are extrapolated across a gap. Volume is withheld if coverage
-    is insufficient; otherwise it is a measured lower bound over covered cells
+    is insufficient; otherwise it is a partial estimate over covered cells
     (the missing fraction is still reported). Grid convergence is the caller's
     responsibility. This is a planar reference, not a curved-skin model.
     """
@@ -236,8 +236,9 @@ def file_record(path):
     return {'path': str(path.resolve()), 'sha256': digest.hexdigest()}
 
 
-def measure_prediction(prediction_path, transform_path):
-    """Run the unchanged pipeline on a copy in mm, with traceable scale.
+def measure_prediction(prediction_path, transform_path, boundary_mode='geometry',
+                       footprint_output=None):
+    """Run the production measurement code on a copy in mm, with traceable scale.
 
     This deliberately receives no reference annotation or reference cloud.
     The supplied transform establishes benchmark coordinates; it is not a
@@ -251,17 +252,24 @@ def measure_prediction(prediction_path, transform_path):
     points = apply_similarity(load_points(prediction_path), transform)
     cloud = o3d.geometry.PointCloud()
     cloud.points = o3d.utility.Vector3dVector(points)
+    original = o3d.io.read_point_cloud(str(prediction_path))
+    if original.has_colors():
+        cloud.colors = original.colors
     log = io.StringIO()
     with tempfile.TemporaryDirectory(prefix='salve-measure-') as directory:
         path = Path(directory) / 'prediction_mm.ply'
         if not o3d.io.write_point_cloud(str(path), cloud):
             raise OSError('Could not write temporary prediction cloud')
         with contextlib.redirect_stdout(log):
-            metrics = wound_measure.measure_wound(str(path), scale=.1)
+            metrics = wound_measure.measure_wound(str(path), scale=.1,
+                                                   boundary_mode=boundary_mode,
+                                                   footprint_output=footprint_output)
     if not metrics:
         raise ValueError('Pipeline did not return valid measurements')
     return {
-        'metrics': {key: float(value) for key, value in metrics.items()},
+        'metrics': {key: float(value) for key, value in metrics.items() if key != 'boundary_source'},
+        'boundary_mode': boundary_mode,
+        'boundary_source': metrics.get('boundary_source', 'geometry'),
         'scale_cm_per_unit': .1,
         'scale_source': 'supplied reconstruction-to-scanner similarity transform',
         'card_coin_scale_validated': False,
@@ -283,6 +291,8 @@ def main():
     prediction_group.add_argument('--prediction', type=Path,
                                   help='Segmented pipeline wound PLY, including skin margin')
     parser.add_argument('--transform', type=Path, help='4x4 reconstruction-to-scanner-mm similarity')
+    parser.add_argument('--boundary-mode', choices=('geometry', 'auto'), default='geometry',
+                        help='geometry reproduces the baseline; auto tests the adaptive color opening')
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     if bool(args.prediction) != bool(args.transform):
@@ -314,7 +324,7 @@ def main():
         prediction = json.loads(args.prediction_measurements.read_text(encoding='utf-8-sig'))
         report['inputs']['prediction_measurements'] = file_record(args.prediction_measurements)
     elif args.prediction:
-        prediction = measure_prediction(args.prediction, args.transform)
+        prediction = measure_prediction(args.prediction, args.transform, boundary_mode=args.boundary_mode)
     if prediction is not None:
         report['prediction'] = prediction
         report['errors'] = compare_metrics(reference['metrics'], prediction['metrics'])

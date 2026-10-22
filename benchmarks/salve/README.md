@@ -2,9 +2,9 @@
 
 ## Status and decision
 
-**Exploratory comparison implemented; production measurement correction and held-out validation remain outstanding.** The scanner surfaces are supplied ground truth. The wound outlines and intact-skin patches in `annotations/` are assistant-drafted reference definitions, not official SALVE annotations or clinician-approved measurements.
+**Exploratory comparison and an opt-in opening correction implemented; accurate depth/volume and held-out validation remain outstanding.** See [the opening correction results](OPENING_FIX.md) for the before/after Dice evaluation. The scanner surfaces are supplied ground truth. The wound outlines and intact-skin patches in `annotations/` are assistant-drafted reference definitions, not official SALVE annotations or clinician-approved measurements.
 
-The first run isolates a major limitation: the automatic pipeline measures the largest detected depression, which can be much smaller than the visible wound opening. Its skin-plane fit also depends strongly on the crop. A constant multiplier cannot resolve these region and reference-plane differences. No fitted correction was applied to `wound_measure.py`, and this work does not establish clinical accuracy.
+The baseline run below isolates a major limitation: the automatic pipeline measures the largest detected depression, which can be much smaller than the visible wound opening. Its skin-plane fit also depends strongly on the crop. A constant multiplier cannot resolve these region and reference-plane differences. The subsequent experimental correction uses the prediction's RGB to estimate the opening; it does not fit a multiplier to the reference, change the default mode, or establish clinical accuracy.
 
 ## PIS3 results
 
