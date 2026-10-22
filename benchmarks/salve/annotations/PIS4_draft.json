@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "case_id": "PIS4",
+  "units": "mm",
+  "status": "draft",
+  "provenance": "Assistant visual digitization of scanner RGB top view on 2026-10-21, before measurement comparison. Main wound only; PIS3 satellite excluded. Intact rim patches chosen near visible edge. Requires independent human review; planar closure may be unsuitable for curved skin.",
+  "wound_polygon_xy": [
+    [
+      108,
+      35
+    ],
+    [
+      102,
+      38
+    ],
+    [
+      98,
+      44
+    ],
+    [
+      96,
+      52
+    ],
+    [
+      96,
+      61
+    ],
+    [
+      98,
+      69
+    ],
+    [
+      102,
+      77
+    ],
+    [
+      108,
+      81
+    ],
+    [
+      114,
+      79
+    ],
+    [
+      120,
+      73
+    ],
+    [
+      123,
+      64
+    ],
+    [
+      124,
+      54
+    ],
+    [
+      122,
+      46
+    ],
+    [
+      117,
+      39
+    ]
+  ],
+  "skin_polygons_xy": [
+    [
+      [
+        89,
+        49
+      ],
+      [
+        93,
+        49
+      ],
+      [
+        93,
+        66
+      ],
+      [
+        89,
+        66
+      ]
+    ],
+    [
+      [
+        127,
+        47
+      ],
+      [
+        131,
+        47
+      ],
+      [
+        131,
+        66
+      ],
+      [
+        127,
+        66
+      ]
+    ],
+    [
+      [
+        101,
+        84
+      ],
+      [
+        115,
+        84
+      ],
+      [
+        115,
+        87
+      ],
+      [
+        101,
+        87
+      ]
+    ],
+    [
+      [
+        103,
+        28
+      ],
+      [
+        117,
+        28
+      ],
+      [
+        117,
+        31
+      ],
+      [
+        103,
+        31
+      ]
+    ]
+  ],
+  "outward_normal": [
+    0,
+    0,
+    1
+  ],
+  "grid_step_mm": 0.5,
+  "max_neighbor_mm": 1.0,
+  "minimum_coverage": 0.98,
+  "reference_sha256": "ca372ee079bdeeecf54f9ebf192d6172602216e85c7cee9c0a2e22dbde1b45da",
+  "dataset": "SALVE 3D Silicon Wounds Dataset, WACV 2025",
+  "dataset_doi": "10.25919/CVHK-PC32",
+  "license": "CC-BY-NC-SA-4.0"
+}

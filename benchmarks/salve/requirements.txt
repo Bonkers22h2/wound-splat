@@ -1,0 +1,8 @@
+# Analysis environment used for this exploratory study (Python 3.12).
+# This does not replace backend/requirements.txt or install the CUDA trainer.
+numpy==2.5.4
+scipy==1.18.1
+plyfile==1.1.5
+open3d==0.20.0
+matplotlib==3.11.2
+pytest==9.1.1

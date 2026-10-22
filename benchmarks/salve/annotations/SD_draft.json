@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "case_id": "SD",
+  "units": "mm",
+  "status": "draft",
+  "provenance": "Assistant visual digitization of scanner RGB top view on 2026-10-21, before measurement comparison. Main wound only; PIS3 satellite excluded. Intact rim patches chosen near visible edge. Requires independent human review; planar closure may be unsuitable for curved skin.",
+  "wound_polygon_xy": [
+    [
+      101,
+      0
+    ],
+    [
+      98,
+      14
+    ],
+    [
+      94,
+      28
+    ],
+    [
+      94,
+      40
+    ],
+    [
+      96,
+      51
+    ],
+    [
+      94,
+      63
+    ],
+    [
+      96,
+      76
+    ],
+    [
+      95,
+      88
+    ],
+    [
+      97,
+      99
+    ],
+    [
+      99,
+      109
+    ],
+    [
+      101,
+      121
+    ],
+    [
+      104,
+      111
+    ],
+    [
+      109,
+      99
+    ],
+    [
+      113,
+      88
+    ],
+    [
+      116,
+      77
+    ],
+    [
+      115,
+      66
+    ],
+    [
+      114,
+      55
+    ],
+    [
+      115,
+      44
+    ],
+    [
+      116,
+      32
+    ],
+    [
+      113,
+      19
+    ],
+    [
+      109,
+      9
+    ],
+    [
+      106,
+      0
+    ]
+  ],
+  "skin_polygons_xy": [
+    [
+      [
+        86,
+        30
+      ],
+      [
+        91,
+        30
+      ],
+      [
+        91,
+        90
+      ],
+      [
+        86,
+        90
+      ]
+    ],
+    [
+      [
+        120,
+        25
+      ],
+      [
+        125,
+        25
+      ],
+      [
+        125,
+        90
+      ],
+      [
+        120,
+        90
+      ]
+    ],
+    [
+      [
+        94,
+        123
+      ],
+      [
+        108,
+        123
+      ],
+      [
+        108,
+        127
+      ],
+      [
+        94,
+        127
+      ]
+    ],
+    [
+      [
+        96,
+        -9
+      ],
+      [
+        111,
+        -9
+      ],
+      [
+        111,
+        -5
+      ],
+      [
+        96,
+        -5
+      ]
+    ]
+  ],
+  "outward_normal": [
+    0,
+    0,
+    1
+  ],
+  "grid_step_mm": 0.5,
+  "max_neighbor_mm": 1.0,
+  "minimum_coverage": 0.98,
+  "reference_sha256": "ea8c3e304217cfc13197ad144306fb2ac10b6efc47ee48b4126ed1b3d4aecb4d",
+  "dataset": "SALVE 3D Silicon Wounds Dataset, WACV 2025",
+  "dataset_doi": "10.25919/CVHK-PC32",
+  "license": "CC-BY-NC-SA-4.0"
+}

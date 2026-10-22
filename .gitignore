@@ -1,6 +1,7 @@
 # Python
 venv/
 .venv/
+.venv-salve/
 __pycache__/
 *.pyc
 *.pyo

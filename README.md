@@ -363,6 +363,14 @@ Surface agreement does not establish wound area, volume, or depth accuracy.
 The available PIS3 polygon bounds the scan region, not an independently
 annotated wound outline with clinical reference measurements.
 
+The [scanner-derived measurement study](benchmarks/salve/README.md) now provides
+a reproducible comparison using explicit **draft** wound outlines and skin
+patches, input hashes, coverage checks and sensitivity analysis. PIS3 shows
+large disagreement and strong skin-margin sensitivity; no correction factor
+has been applied, and withheld-phantom/clinical validation remains outstanding.
+Run `python benchmarks/salve/run_study.py` with the local SALVE data and saved
+PIS3 reconstruction to reproduce it.
+
 ### Physical wound-measurement accuracy — still outstanding
 
 > **Status: outstanding.** End-to-end wound-measurement accuracy is not established.
