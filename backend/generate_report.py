@@ -114,7 +114,8 @@ def _general_notes():
     ]
 
 
-def get_recommendation(surface_area, volume, max_depth, scale_calibrated=True):
+def get_recommendation(surface_area, volume, max_depth, scale_calibrated=True,
+                       measurement_mode='geometry'):
     """Describe what was measured and what it is commonly associated with.
 
     Wound-Splat is decision support: it reports observations, and a clinician
@@ -139,6 +140,18 @@ def get_recommendation(surface_area, volume, max_depth, scale_calibrated=True):
             _general_notes(),
         )
 
+    if measurement_mode in ('auto', 'surface'):
+        return ('unknown', 'Size assessment withheld — experimental method', GRAY, LIGHT_GRAY,
+                'These measurements use an experimental method whose physical accuracy is not validated. '
+                'Depth-based assessments are withheld pending independent verification.', _general_notes())
+    if measurement_mode != 'geometry':
+        return ('unknown', 'Measurement method unavailable', GRAY, LIGHT_GRAY,
+                'The saved measurement method could not be verified. Depth-based assessments are withheld.',
+                _general_notes())
+    if any(value is None for value in (surface_area, volume, max_depth)):
+        return ('unknown', 'Size assessment unavailable', GRAY, LIGHT_GRAY,
+                'One or more geometric measurements are unavailable. Missing measurements are not zero.',
+                _general_notes())
     measured = (
         f"Measured maximum depth {max_depth:.1f} mm, surface area "
         f"{surface_area:.2f} cm², estimated volume {volume:.2f} cm³. "
@@ -202,7 +215,8 @@ def get_recommendation(surface_area, volume, max_depth, scale_calibrated=True):
 
 def generate_report(scan_id, patient_name, patient_code, video_filename,
                     output_dir, measurements, template_dir=None, registration_rate=None,
-                    render_iteration=15000, tissue=None, scale_calibrated=True):
+                    render_iteration=15000, tissue=None, scale_calibrated=True,
+                    measurement_mode='geometry'):
     # build the full pdf report for a scan and save it to the output folder
     pdf_path = os.path.join(output_dir, "report.pdf")
     doc = SimpleDocTemplate(pdf_path, pagesize=A4,
@@ -260,26 +274,28 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
 
     # ── MEASUREMENTS ─────────────────────────────────────────────────
     section_title("Wound Measurements")
-    surface_area = measurements.get("surface_area_cm2", 0)
-    volume = measurements.get("volume_cm3", 0)
-    max_depth = measurements.get("max_depth_mm", 0)
-    width = measurements.get("width_cm", 0)
-    height = measurements.get("height_cm", 0)
+    surface_area = measurements.get("surface_area_cm2")
+    volume = measurements.get("volume_cm3")
+    max_depth = measurements.get("max_depth_mm")
+    width = measurements.get("width_cm")
+    height = measurements.get("height_cm")
+    def metric(value, decimals=2):
+        return f'{value:.{decimals}f}' if scale_calibrated and value is not None else 'N/A'
 
-    metric_style = ParagraphStyle('m', fontSize=22, textColor=TEAL,
+    metric_style = ParagraphStyle('m', fontSize=22, leading=26, spaceAfter=4, textColor=TEAL,
                                   fontName='Helvetica-Bold', alignment=TA_CENTER)
-    unit_style = ParagraphStyle('u', fontSize=9, textColor=GRAY, alignment=TA_CENTER)
+    unit_style = ParagraphStyle('u', fontSize=9, leading=12, textColor=GRAY, alignment=TA_CENTER)
     label_style = ParagraphStyle('l', fontSize=8, textColor=colors.HexColor('#374151'),
                                  fontName='Helvetica-Bold', alignment=TA_CENTER)
 
     metrics_data = [[
-        [Paragraph(f'{surface_area:.2f}', metric_style),
+        [Paragraph(metric(surface_area), metric_style),
          Paragraph('cm²', unit_style),
          Paragraph('SURFACE AREA', label_style)],
-        [Paragraph(f'{volume:.2f}', metric_style),
+        [Paragraph(metric(volume), metric_style),
          Paragraph('cm³', unit_style),
          Paragraph('VOLUME', label_style)],
-        [Paragraph(f'{max_depth:.1f}', metric_style),
+        [Paragraph(metric(max_depth, 1), metric_style),
          Paragraph('mm', unit_style),
          Paragraph('MAX DEPTH', label_style)],
     ]]
@@ -296,7 +312,7 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
 
     accuracy_display = f'{registration_rate:.1f}%' if registration_rate is not None else 'N/A'
     secondary_data = [
-        ['Wound Width', f'{width:.2f} cm', 'Wound Height', f'{height:.2f} cm'],
+        ['Wound Width', f'{metric(width)} cm', 'Wound Height', f'{metric(height)} cm'],
         ['Reconstruction Quality', accuracy_display, 'Points Reconstructed', measurements.get("point_count", "N/A")],
     ]
     sec_table = Table(secondary_data, colWidths=[4*cm, 4*cm, 4*cm, 5.5*cm])
@@ -345,7 +361,7 @@ def generate_report(scan_id, patient_name, patient_code, video_filename,
     # ── ASSESSMENT ───────────────────────────────────────────────────
     section_title("Clinical Assessment")
     severity, severity_label, severity_color, severity_bg, assessment, recs = \
-        get_recommendation(surface_area, volume, max_depth, scale_calibrated)
+        get_recommendation(surface_area, volume, max_depth, scale_calibrated, measurement_mode)
 
     badge_data = [[Paragraph(f'<b>{severity_label}</b>',
                              ParagraphStyle('b', fontSize=10, textColor=severity_color,

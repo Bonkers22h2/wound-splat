@@ -12,7 +12,7 @@ from datetime import datetime
 from app.database import SessionLocal
 from app.models.db import Measurement, Scan, ScanStatus
 from app.paths import GAUSSIAN_SPLATTING_DIR
-from app.services.measurements import parse_measurements
+from app.services.measurements import parse_measurements, measurement_mode_arguments
 from app.services.scale_calibration import estimate_scan_scale
 from app.services.report_service import generate_scan_report
 from app.services.scan_outputs import count_images, find_latest_iteration_dir
@@ -359,6 +359,7 @@ def _measure_wound(wound_only_path: str, scale: float | None) -> dict:
     cmd = [
         sys.executable, f"{GAUSSIAN_SPLATTING_DIR}/wound_measure.py",
         "--ply", wound_only_path,
+        *measurement_mode_arguments(wound_only_path),
     ]
     if scale is not None:
         cmd += ["--scale", str(scale)]

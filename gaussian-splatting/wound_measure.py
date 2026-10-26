@@ -26,6 +26,7 @@ parsed by backend/app/services/measurements.py — keep them stable.
 """
 import argparse
 import os
+import json
 
 import numpy as np
 import open3d as o3d
@@ -248,9 +249,12 @@ def _heightfield(uv: np.ndarray, depth: np.ndarray, cell: float):
 
 
 def measure_wound(ply_path: str, scale: float = 1.0, boundary_mode: str = 'geometry',
-                  footprint_output: str | None = None) -> dict:
-    if boundary_mode not in ('auto', 'geometry'):
-        raise ValueError('boundary_mode must be auto or geometry')
+                  footprint_output: str | None = None, camera_positions=None,
+                  outward_normal=None) -> dict:
+    if boundary_mode not in ('auto', 'geometry', 'surface'):
+        raise ValueError('boundary_mode must be auto, geometry or surface')
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError('Scale must be finite and positive')
     print("\n=== Wound-Splat Measurement Tool ===")
     print(f"Loading point cloud: {ply_path}")
 
@@ -273,6 +277,42 @@ def measure_wound(ply_path: str, scale: float = 1.0, boundary_mode: str = 'geome
         return {}
 
     points = np.asarray(pcd.points)
+    if boundary_mode == 'surface':
+        from wound_surface import measure_surface, camera_outward
+        if camera_positions is not None and outward_normal is not None:
+            raise ValueError('Supply camera positions or an outward normal, not both')
+        if camera_positions is not None:
+            outward_normal = camera_outward(points, camera_positions)
+        if outward_normal is None:
+            raise ValueError('Surface mode requires camera poses or an explicit outward normal')
+        result = measure_surface(points, np.asarray(pcd.colors), outward_normal, scale)
+        footprint = result.pop('footprint')
+        if footprint_output is not None:
+            np.savez_compressed(footprint_output, **footprint)
+        result.update(clinical_validation=False, boundary_mode='surface',
+                      orientation_source='capture_cameras' if camera_positions is not None else 'explicit_normal',
+                      scale_cm_per_unit=scale,
+                      plane_normal=footprint['normal'].tolist(),
+                      plane_offset=float(footprint['plane_offset']))
+        results_path = os.path.join(os.path.dirname(ply_path), 'wound_measurements')
+        with open(results_path + '.json', 'w') as handle:
+            json.dump(result, handle, indent=2, allow_nan=False)
+        labels = [('Surface Area','surface_area_cm2','cm2'), ('Volume','volume_cm3','cm3'),
+                  ('Max Depth','max_depth_mm','mm'), ('Width','width_cm','cm'), ('Height','height_cm','cm')]
+        lines = ['EXPERIMENTAL SURFACE MEASUREMENTS',
+                 f"Boundary: {result['boundary_source']}",
+                 f"Orientation: {result['orientation_source']}",
+                 f"Surface coverage: {result['coverage']:.3%}",
+                 f"Status: {result['status']}; accuracy not validated"]
+        for label, key, unit in labels:
+            value = result['metrics'][key]
+            lines.append(f'{label} : {value:.2f} {unit}' if value is not None else f'{label} : unavailable')
+        output = '\n'.join(lines) + '\n'
+        print(output)
+        with open(results_path + '.txt', 'w') as handle:
+            handle.write(output)
+        return {**{key: round(value, 2) if value is not None else None
+                   for key,value in result['metrics'].items()}, 'boundary_source': result['boundary_source']}
     median_nn = _median_nn_distance(pcd)
 
     print("[2/5] Fitting reference skin plane...")
@@ -380,7 +420,7 @@ def measure_wound(ply_path: str, scale: float = 1.0, boundary_mode: str = 'geome
         f.write(f"Boundary     : {boundary_source}\n")
     print(f"Results saved to: {results_path}")
 
-    return {
+    metrics = {
         "surface_area_cm2": round(planar_area_cm2, 2),
         "volume_cm3": round(volume_cm3, 2),
         "max_depth_mm": round(max_depth_mm, 2),
@@ -388,6 +428,12 @@ def measure_wound(ply_path: str, scale: float = 1.0, boundary_mode: str = 'geome
         "height_cm": round(major_cm, 2),
         "boundary_source": boundary_source,
     }
+    with open(os.path.join(os.path.dirname(ply_path), 'wound_measurements.json'), 'w') as handle:
+        json.dump({'metrics': {key: float(value) for key,value in metrics.items() if key != 'boundary_source'},
+                   'boundary_mode': boundary_mode, 'boundary_source': boundary_source,
+                   'status': 'unvalidated' if boundary_mode == 'geometry' else 'experimental',
+                   'clinical_validation': False, 'scale_cm_per_unit': scale}, handle, indent=2, allow_nan=False)
+    return metrics
 
 
 if __name__ == "__main__":
@@ -396,9 +442,14 @@ if __name__ == "__main__":
     parser.add_argument("--scale", default=1.0, type=float,
                         help="Centimeters per cloud unit (from reference-object "
                              "calibration; default 1.0 = legacy uncalibrated)")
-    parser.add_argument('--boundary-mode', choices=('auto', 'geometry'), default='geometry',
+    parser.add_argument('--boundary-mode', choices=('auto', 'geometry', 'surface'), default='geometry',
                         help='auto: experimental adaptive red-tissue opening with RGB; '
-                             'geometry: default deepest-depression footprint')
+                             'geometry: default deepest-depression footprint; '
+                             'surface: experimental camera-oriented local skin-plane measurements')
+    orientation = parser.add_mutually_exclusive_group()
+    orientation.add_argument('--camera-poses', help='3DGS cameras.json in the same coordinate frame as the cloud')
+    orientation.add_argument('--outward-normal', nargs=3, type=float,
+                             help='Explicit outward XYZ direction for controlled surface experiments')
     parser.add_argument('--footprint-output', help='Optional NPZ opening mask for overlap evaluation')
     args = parser.parse_args()
 
@@ -406,5 +457,10 @@ if __name__ == "__main__":
         print(f"Error: File not found: {args.ply}")
         exit(1)
 
+    positions = None
+    if args.camera_poses:
+        with open(args.camera_poses) as handle:
+            positions = np.asarray([camera['position'] for camera in json.load(handle)], dtype=float)
     measure_wound(args.ply, scale=args.scale, boundary_mode=args.boundary_mode,
-                  footprint_output=args.footprint_output)
+                  footprint_output=args.footprint_output, camera_positions=positions,
+                  outward_normal=args.outward_normal)

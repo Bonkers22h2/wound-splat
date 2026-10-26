@@ -50,6 +50,23 @@ def test_uncalibrated_scans_get_no_depth_based_clinical_advice():
     assert "specialist" not in text
 
 
+def test_experimental_measurements_do_not_produce_depth_grades():
+    result = get_recommendation(**DEEP, scale_calibrated=True, measurement_mode='surface')
+    assert result[0] == 'unknown'
+    assert 'experimental' in _all_text(result)
+
+
+def test_missing_depth_is_not_treated_as_zero():
+    result = get_recommendation(surface_area=3., volume=None, max_depth=None, scale_calibrated=True)
+    assert result[0] == 'unknown'
+    assert 'unavailable' in _all_text(result)
+
+
+def test_unknown_method_does_not_restore_depth_assessment():
+    result = get_recommendation(**DEEP, scale_calibrated=True, measurement_mode='unknown')
+    assert result[0] == 'unknown'
+
+
 def test_uncalibrated_scans_say_why_the_sizes_cannot_be_relied_on():
     _, _, _, _, assessment, _ = get_recommendation(**DEEP, scale_calibrated=False)
 

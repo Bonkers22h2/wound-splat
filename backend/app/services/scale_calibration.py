@@ -1,6 +1,7 @@
 """Works out the real-world scale from a known-size object in the video."""
 import subprocess
 import sys
+import math
 
 from app.paths import GAUSSIAN_SPLATTING_DIR
 
@@ -16,6 +17,7 @@ REFERENCE_CHOICES = {
     "coin:gbp_1",
     "coin:php_1",
     "coin:php_5",
+    "coin:php_5_bsp",
     "coin:php_10",
 }
 
@@ -35,7 +37,8 @@ def estimate_scan_scale(data_dir: str, reference_object: str) -> float | None:
     for line in result.stdout.splitlines():
         if line.startswith(SCALE_LINE_PREFIX):
             try:
-                return float(line.split(":", 1)[1].strip())
+                scale = float(line.split(":", 1)[1].strip())
+                return scale if math.isfinite(scale) and scale > 0 else None
             except ValueError:
                 return None
     return None

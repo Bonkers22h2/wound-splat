@@ -237,7 +237,7 @@ def file_record(path):
 
 
 def measure_prediction(prediction_path, transform_path, boundary_mode='geometry',
-                       footprint_output=None):
+                       footprint_output=None, camera_path=None, outward_normal=None):
     """Run the production measurement code on a copy in mm, with traceable scale.
 
     This deliberately receives no reference annotation or reference cloud.
@@ -250,6 +250,12 @@ def measure_prediction(prediction_path, transform_path, boundary_mode='geometry'
 
     transform = np.loadtxt(transform_path)
     points = apply_similarity(load_points(prediction_path), transform)
+    camera_positions = None
+    if camera_path is not None:
+        cameras = json.loads(Path(camera_path).read_text())
+        camera_positions = apply_similarity([camera['position'] for camera in cameras], transform)
+    if outward_normal is not None:
+        outward_normal = transform[:3, :3] @ np.asarray(outward_normal, dtype=float)
     cloud = o3d.geometry.PointCloud()
     cloud.points = o3d.utility.Vector3dVector(points)
     original = o3d.io.read_point_cloud(str(prediction_path))
@@ -263,19 +269,26 @@ def measure_prediction(prediction_path, transform_path, boundary_mode='geometry'
         with contextlib.redirect_stdout(log):
             metrics = wound_measure.measure_wound(str(path), scale=.1,
                                                    boundary_mode=boundary_mode,
-                                                   footprint_output=footprint_output)
+                                                   footprint_output=footprint_output,
+                                                   camera_positions=camera_positions,
+                                                   outward_normal=outward_normal)
+        quality_path = Path(directory) / 'wound_measurements.json'
+        quality = json.loads(quality_path.read_text()) if quality_path.exists() else None
     if not metrics:
         raise ValueError('Pipeline did not return valid measurements')
     return {
-        'metrics': {key: float(value) for key, value in metrics.items() if key != 'boundary_source'},
+        'metrics': {key: float(value) if value is not None else None
+                    for key, value in metrics.items() if key != 'boundary_source'},
         'boundary_mode': boundary_mode,
         'boundary_source': metrics.get('boundary_source', 'geometry'),
+        'quality': quality,
         'scale_cm_per_unit': .1,
         'scale_source': 'supplied reconstruction-to-scanner similarity transform',
         'card_coin_scale_validated': False,
         'inputs': {
             'prediction': file_record(prediction_path), 'transform': file_record(transform_path),
             'measurement_script': file_record(wound_measure.__file__),
+            **({'camera_poses': file_record(camera_path)} if camera_path else {}),
         },
         'log': log.getvalue(),
     }
@@ -291,8 +304,11 @@ def main():
     prediction_group.add_argument('--prediction', type=Path,
                                   help='Segmented pipeline wound PLY, including skin margin')
     parser.add_argument('--transform', type=Path, help='4x4 reconstruction-to-scanner-mm similarity')
-    parser.add_argument('--boundary-mode', choices=('geometry', 'auto'), default='geometry',
+    parser.add_argument('--boundary-mode', choices=('geometry', 'auto', 'surface'), default='geometry',
                         help='geometry reproduces the baseline; auto tests the adaptive color opening')
+    orientation = parser.add_mutually_exclusive_group()
+    orientation.add_argument('--camera-poses', type=Path, help='3DGS cameras.json in prediction coordinates')
+    orientation.add_argument('--outward-normal', nargs=3, type=float)
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     if bool(args.prediction) != bool(args.transform):
@@ -300,7 +316,8 @@ def main():
     if args.output.suffix.lower() != '.json':
         parser.error('--output must end in .json; a separate .csv is generated for comparisons')
     # Never allow output to overwrite an input, including a supplied JSON.
-    inputs = [args.reference, args.annotation, args.prediction, args.transform, args.prediction_measurements]
+    inputs = [args.reference, args.annotation, args.prediction, args.transform,
+              args.prediction_measurements, args.camera_poses]
     outputs = [args.output.resolve(), args.output.with_suffix('.csv').resolve()]
     if any(p and p.resolve() in outputs for p in inputs):
         parser.error('Output must not overwrite an input')
@@ -324,7 +341,8 @@ def main():
         prediction = json.loads(args.prediction_measurements.read_text(encoding='utf-8-sig'))
         report['inputs']['prediction_measurements'] = file_record(args.prediction_measurements)
     elif args.prediction:
-        prediction = measure_prediction(args.prediction, args.transform, boundary_mode=args.boundary_mode)
+        prediction = measure_prediction(args.prediction, args.transform, boundary_mode=args.boundary_mode,
+                                        camera_path=args.camera_poses, outward_normal=args.outward_normal)
     if prediction is not None:
         report['prediction'] = prediction
         report['errors'] = compare_metrics(reference['metrics'], prediction['metrics'])

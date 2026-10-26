@@ -143,6 +143,7 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
     measurement = scan.measurements
     if not measurement:
         raise HTTPException(status_code=404, detail="Measurements not found")
+    from app.services.measurements import saved_measurement_metadata
     return {
         "surface_area_cm2": measurement.surface_area_cm2,
         "volume_cm3": measurement.volume_cm3,
@@ -155,6 +156,7 @@ def get_measurements(scan_id: str, db: Session = Depends(get_db)):
         "reference_object": scan.reference_object,
         "scale_cm_per_unit": scan.scale_cm_per_unit,
         "scale_calibrated": scan.scale_cm_per_unit is not None,
+        **saved_measurement_metadata(scan.output_path),
     }
 
 

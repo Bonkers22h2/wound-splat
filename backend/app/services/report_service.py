@@ -11,7 +11,10 @@ def generate_scan_report(scan_id: str, **report_kwargs) -> bool:
         if backend_dir not in sys.path:
             sys.path.insert(0, backend_dir)
         from generate_report import generate_report
+        from app.services.measurements import saved_measurement_metadata
 
+        report_kwargs.setdefault('measurement_mode', saved_measurement_metadata(
+            report_kwargs.get('output_dir'))['measurement_mode'])
         generate_report(scan_id=scan_id, **report_kwargs)
         return True
     except Exception as exc:

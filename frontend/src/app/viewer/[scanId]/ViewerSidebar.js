@@ -19,14 +19,15 @@ const toggleButtonStyle = (active, busy) => ({
 })
 
 function MeasurementsList({ measurements }) {
-  const rows = [
-    { label: 'Surface Area', value: `${measurements.surface_area_cm2} cm²` },
-    { label: 'Volume', value: `${measurements.volume_cm3} cm³` },
-    { label: 'Max Depth', value: `${measurements.max_depth_mm} mm` },
-    { label: 'Width', value: `${measurements.width_cm} cm` },
-    { label: 'Height', value: `${measurements.height_cm} cm` },
-  ]
   const calibrated = measurements.scale_calibrated
+  const display = (value, unit) => calibrated && value != null ? `${value} ${unit}` : 'Unavailable'
+  const rows = [
+    { label: 'Surface Area', value: display(measurements.surface_area_cm2, 'cm²') },
+    { label: 'Volume', value: display(measurements.volume_cm3, 'cm³') },
+    { label: 'Max Depth', value: display(measurements.max_depth_mm, 'mm') },
+    { label: 'Width', value: display(measurements.width_cm, 'cm') },
+    { label: 'Height', value: display(measurements.height_cm, 'cm') },
+  ]
   return (
     <div style={{ marginBottom: '1.5rem' }}>
       <p style={{ fontSize: '11px', fontWeight: 700, color: COLORS.primary, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
@@ -49,7 +50,14 @@ function MeasurementsList({ measurements }) {
       }}>
         {calibrated
           ? 'Scale calibrated from the size reference in the video'
-          : 'Uncalibrated scale — sizes are approximate. Include a bank card or coin next to the wound when filming.'}
+          : 'Physical sizes are unavailable without a known scale. Include the matching coin or a bank card when filming.'}
+      </p>
+      <p style={{ fontSize: '12px', color: COLORS.textMuted }}>
+        {measurements.measurement_status === 'boundary_review_required'
+          ? 'Measurements withheld: the wound boundary needs review.'
+          : ['auto', 'surface'].includes(measurements.measurement_mode)
+          ? 'Experimental measurement method. Accuracy has not been validated.'
+          : 'Scale calibration does not establish measurement accuracy.'}
       </p>
     </div>
   )

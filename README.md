@@ -377,6 +377,15 @@ through `wound_measure.py --boundary-mode auto`; the application retains the
 default geometric mode. Area remains overestimated, width worsens, and depth
 and volume are unchanged. This single development case is not a dataset score.
 
+The [measurement follow-up](benchmarks/salve/FOLLOWUP.md) adds an experimental
+camera-oriented surface method with boundary-support and coverage checks,
+fixes coin edge/focal-length calibration, and distinguishes the 25 mm NGC and
+27 mm older BSP five-peso coins. The new surface method rejects the current
+PIS3 reconstruction as insufficiently supported; its candidate scores are
+diagnostic only. `WOUND_MEASUREMENT_MODE` permits explicit server-side
+experiments while retaining `geometry` by default. Physical sizes are hidden
+when scale is missing, and experimental methods are labeled in the viewer.
+
 ### Physical wound-measurement accuracy — still outstanding
 
 > **Status: outstanding.** End-to-end wound-measurement accuracy is not established.

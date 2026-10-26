@@ -7,7 +7,7 @@ from celery_worker import celery_app
 from app.database import SessionLocal
 from app.models.db import Measurement, Scan, ScanStatus
 from app.paths import GAUSSIAN_SPLATTING_DIR
-from app.services.measurements import parse_measurements
+from app.services.measurements import parse_measurements, measurement_mode_arguments
 from app.services.report_service import generate_scan_report
 
 TRAIN_ITERATIONS = 7000
@@ -91,8 +91,12 @@ def process_wound_video(self, scan_id: str):
         print(f"[{scan_id}] Step 6: Measuring wound...")
         result = subprocess.run([
             python, str(GAUSSIAN_SPLATTING_DIR / "wound_measure.py"),
-            "--ply", str(wound_only_path)
+            "--ply", str(wound_only_path),
+            *measurement_mode_arguments(str(wound_only_path))
         ], capture_output=True, text=True, cwd=str(GAUSSIAN_SPLATTING_DIR))
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Wound measurement failed: {result.stderr[-2000:]}")
 
         measurements = parse_measurements(result.stdout)
 

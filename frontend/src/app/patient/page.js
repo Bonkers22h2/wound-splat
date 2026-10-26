@@ -11,7 +11,7 @@ import { STATUS_STYLE } from '@/lib/theme'
 // so a wrong default can't quietly calibrate the scan against the wrong object.
 const NO_REFERENCE = 'none'
 const REFERENCE_OPTIONS = [
-  { value: NO_REFERENCE, label: 'No reference (sizes will be approximate)' },
+  { value: NO_REFERENCE, label: 'No reference (physical sizes unavailable)' },
   { value: 'card', label: 'Bank/ID card (recommended)' },
   { value: 'coin:us_quarter', label: 'Coin – US quarter' },
   { value: 'coin:us_nickel', label: 'Coin – US nickel' },
@@ -21,7 +21,8 @@ const REFERENCE_OPTIONS = [
   { value: 'coin:eur_2', label: 'Coin – 2 euro' },
   { value: 'coin:gbp_1', label: 'Coin – UK £1' },
   { value: 'coin:php_1', label: 'Coin – ₱1 peso' },
-  { value: 'coin:php_5', label: 'Coin – ₱5 peso' },
+  { value: 'coin:php_5', label: 'Coin – ₱5 NGC, silver-colored (25 mm)' },
+  { value: 'coin:php_5_bsp', label: 'Coin – ₱5 BSP, older gold-colored (27 mm)' },
   { value: 'coin:php_10', label: 'Coin – ₱10 peso' },
 ]
 

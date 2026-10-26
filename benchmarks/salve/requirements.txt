@@ -6,3 +6,4 @@ plyfile==1.1.5
 open3d==0.20.0
 matplotlib==3.11.2
 pytest==9.1.1
+opencv-python-headless==4.13.0.92

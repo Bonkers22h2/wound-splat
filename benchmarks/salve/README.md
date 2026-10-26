@@ -1,5 +1,9 @@
 # SALVE wound-measurement comparison
 
+Latest work: [October 26 follow-up](FOLLOWUP.md), including calibration fixes,
+camera-oriented surface experiments, rejected candidate measurements and
+application integration. Reliable end-to-end dimensions remain unvalidated.
+
 ## Status and decision
 
 **Exploratory comparison and an opt-in opening correction implemented; accurate depth/volume and held-out validation remain outstanding.** See [the opening correction results](OPENING_FIX.md) for the before/after Dice evaluation. The scanner surfaces are supplied ground truth. The wound outlines and intact-skin patches in `annotations/` are assistant-drafted reference definitions, not official SALVE annotations or clinician-approved measurements.

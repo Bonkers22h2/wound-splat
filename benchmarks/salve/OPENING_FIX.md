@@ -1,5 +1,9 @@
 # Experimental wound-opening correction
 
+For the later camera-oriented surface experiment, coin-calibration fixes and
+boundary-quality rejection results, see [the October 26 follow-up](FOLLOWUP.md).
+The results below document the original opt-in `auto` implementation.
+
 An opt-in RGB opening detector improves the saved PIS3 reconstruction's opening
 overlap, but does **not** make the full measurement pipeline accurate. Default
 application behavior remains `geometry`; the new `auto` mode is experimental.

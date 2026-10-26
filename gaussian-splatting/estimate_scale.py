@@ -6,8 +6,8 @@ known-size flat reference next to the wound (an ISO ID-1 card or a common
 coin), and this script recovers centimeters-per-cloud-unit from it:
 
   1. Detect the reference in several undistorted capture frames (card =
-     convex quad of card-like aspect; coin = ellipse, whose major axis equals
-     the true diameter regardless of tilt).
+     convex quad of card-like aspect; coin = ellipse, whose major axis
+     approximates diameter under weak perspective).
   2. Recover the reference's distance from each camera by projecting the
      COLMAP sparse points into the frame and taking the median depth inside
      the detection box (the reference lies on the skin, so surrounding
@@ -28,16 +28,21 @@ import glob
 import json
 import os
 import sys
+import importlib.util
+from pathlib import Path
 
 import cv2
 import numpy as np
 
-from scene.colmap_loader import (
-    qvec2rotmat,
-    read_extrinsics_binary,
-    read_intrinsics_binary,
-    read_points3D_binary,
-)
+# Loading scene.__init__ would import the CUDA trainer. Calibration needs only
+# the standalone NumPy COLMAP reader and must also run in analysis environments.
+_spec = importlib.util.spec_from_file_location('scale_colmap_loader', Path(__file__).parent / 'scene/colmap_loader.py')
+_colmap = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_colmap)
+qvec2rotmat = _colmap.qvec2rotmat
+read_extrinsics_binary = _colmap.read_extrinsics_binary
+read_intrinsics_binary = _colmap.read_intrinsics_binary
+read_points3D_binary = _colmap.read_points3D_binary
 
 # Real sizes in millimeters. Card = ISO/IEC 7810 ID-1 long edge (worldwide
 # standard for payment/ID cards). Coins = official mint diameters.
@@ -51,7 +56,8 @@ KNOWN_REFERENCES = {
     "coin:eur_2": ("2 euro", 25.75),
     "coin:gbp_1": ("UK 1 pound", 23.43),
     "coin:php_1": ("1 Philippine peso", 23.00),
-    "coin:php_5": ("5 Philippine peso", 25.00),
+    "coin:php_5": ("5 Philippine peso NGC series (silver-colored)", 25.00),
+    "coin:php_5_bsp": ("5 Philippine peso BSP series (older gold-colored)", 27.00),
     "coin:php_10": ("10 Philippine peso", 27.00),
 }
 
@@ -213,16 +219,17 @@ def _is_tissue(bgr: np.ndarray, center, axes, angle) -> bool:
     return red and sat > TISSUE_MIN_SATURATION
 
 
-def detect_coin(bgr: np.ndarray) -> tuple | None:
+def detect_coin(bgr: np.ndarray, focal_ratio: float = 1.0) -> tuple | None:
     """Find the best coin-like ellipse; returns (major_axis_px, bbox).
 
-    The major axis of a tilted circle's projection stays equal to the true
-    diameter, so tilt does not bias the measurement. Red-interior candidates
-    are rejected as tissue.
+    With focal_ratio=fx/fy, the returned diameter is in fx-equivalent pixels.
+    Major-axis sizing is a weak-perspective approximation, not an exact
+    perspective correction for tilt. Red interiors are rejected as tissue.
     """
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(cv2.GaussianBlur(gray, (7, 7), 0), 40, 120)
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8))
+    # Do not dilate: fitting the expanded outside contour systematically
+    # inflates the coin diameter and therefore underestimates physical scale.
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
     img_area = gray.shape[0] * gray.shape[1]
@@ -251,7 +258,10 @@ def detect_coin(bgr: np.ndarray) -> tuple | None:
         score = area * (minor / major)
         if best is None or score > best[0]:
             x, y, w, h = cv2.boundingRect(contour)
-            best = (score, major, (x, y, w, h))
+            normalized = contour.astype(np.float32)
+            normalized[:, :, 1] *= focal_ratio
+            _, normalized_axes, _ = cv2.fitEllipse(normalized)
+            best = (score, max(normalized_axes), (x, y, w, h))
     if best is None:
         return None
     return best[1], best[2]
@@ -275,7 +285,8 @@ def median_depth_in_box(points_cam: np.ndarray, fx, fy, cx, cy, bbox, shape) -> 
     return float(np.median(pts[inside, 2]))
 
 
-def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dict | None:
+def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES,
+                   output_path: str | None = None) -> dict | None:
     ref_name, real_mm = KNOWN_REFERENCES[ref]
     is_card = ref == "card"
     print(f"Reference: {ref_name} = {real_mm:.2f} mm")
@@ -302,14 +313,6 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
         if frame is None:
             continue
 
-        downscale = min(DETECT_MAX_DIM / max(frame.shape), 1.0)
-        small = cv2.resize(frame, None, fx=downscale, fy=downscale) if downscale < 1.0 else frame
-        detection = detect_card(small) if is_card else detect_coin(small)
-        if detection is None:
-            continue
-        size_px = detection[0] / downscale
-        bbox = tuple(int(c / downscale) for c in detection[1])
-
         cam = intrinsics[im.camera_id]
         if cam.model == "PINHOLE":
             fx, fy, cx, cy = cam.params[:4]
@@ -318,6 +321,16 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
         else:
             print(f"  {im.name}: unsupported camera model {cam.model}, skipping")
             continue
+
+        if not np.isfinite([fx, fy, cx, cy]).all() or min(fx, fy) <= 0:
+            continue
+        downscale = min(DETECT_MAX_DIM / max(frame.shape), 1.0)
+        small = cv2.resize(frame, None, fx=downscale, fy=downscale) if downscale < 1.0 else frame
+        detection = detect_card(small) if is_card else detect_coin(small, focal_ratio=fx/fy)
+        if detection is None:
+            continue
+        size_px = detection[0] / downscale
+        bbox = tuple(int(c / downscale) for c in detection[1])
 
         points_cam = xyz @ qvec2rotmat(im.qvec).T + im.tvec
         z = median_depth_in_box(points_cam, fx, fy, cx, cy, bbox, frame.shape)
@@ -370,7 +383,7 @@ def estimate_scale(data_dir: str, ref: str, max_frames: int = MAX_FRAMES) -> dic
         "n_detections": int(len(inliers)),
         "spread": round(spread, 4),
     }
-    with open(os.path.join(data_dir, "scale.json"), "w") as f:
+    with open(output_path or os.path.join(data_dir, "scale.json"), "w") as f:
         json.dump(result, f, indent=2)
 
     print(f"\nDetections: {len(inliers)} of {len(estimates)} kept, spread {spread:.1%}")
@@ -385,7 +398,8 @@ if __name__ == "__main__":
     parser.add_argument("--ref", default="card", choices=sorted(KNOWN_REFERENCES),
                         help="Reference object placed next to the wound")
     parser.add_argument("--max_frames", default=MAX_FRAMES, type=int)
+    parser.add_argument('--output', help='Optional scale JSON output path for evaluation without altering the capture')
     args = parser.parse_args()
 
-    if estimate_scale(args.data_dir, args.ref, args.max_frames) is None:
+    if estimate_scale(args.data_dir, args.ref, args.max_frames, args.output) is None:
         sys.exit(2)
