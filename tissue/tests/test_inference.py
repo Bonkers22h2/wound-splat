@@ -119,6 +119,22 @@ def test_predicted_mask_holds_only_whole_class_indices():
     assert set(np.unique(mask)).issubset({0, 1, 2, 3})
 
 
+def test_inference_uses_normalization_stored_with_the_checkpoint():
+    class RecordingModel(_AlwaysPredicts):
+        tissue_normalization = {"mean": [1.0, 1.0, 1.0], "std": [1.0, 1.0, 1.0]}
+
+        def forward(self, x):
+            self.seen_input = x.detach().cpu().numpy()
+            return super().forward(x)
+
+    model = RecordingModel(2)
+    crop = np.full((16, 16, 3), 255, dtype=np.uint8)
+
+    predict_mask(model, crop, device="cpu")
+
+    np.testing.assert_allclose(model.seen_input, 0.0, atol=1e-6)
+
+
 def _write(path, array):
     Image.fromarray(array).save(path)
 

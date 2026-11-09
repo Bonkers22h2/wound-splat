@@ -85,6 +85,12 @@ def predict_mask(model, crop, mean=None, std=None, device="cpu"):
     mask resized back out. The mask goes back with nearest neighbour: it
     holds class indices, and interpolating them would invent classes.
     """
+    checkpoint_normalization = getattr(model, "tissue_normalization", None)
+    if checkpoint_normalization is not None:
+        if mean is None:
+            mean = np.asarray(checkpoint_normalization["mean"], dtype=np.float32)
+        if std is None:
+            std = np.asarray(checkpoint_normalization["std"], dtype=np.float32)
     mean = MEAN if mean is None else mean
     std = STD if std is None else std
     height, width = crop.shape[:2]

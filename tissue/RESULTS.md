@@ -1,214 +1,104 @@
-# Wound Tissue Segmentation — Results
+# Wound tissue segmentation — experiment results
 
-**Date:** 2026-09-09 · **Hardware:** NVIDIA RTX 4050 Laptop, 6 GB
-**Design:** `docs/superpowers/specs/2026-09-09-wound-tissue-segmentation-design.md`
-**Raw numbers:** `tissue/results/official_split.json`, `tissue/results/crossval.json`
+This file records the experiment summaries that are safe and useful to keep in
+Git. Raw dataset material, exact split manifests, full-precision result files,
+and trained checkpoints remain local because the DFUTissue data may not be
+redistributed.
 
-A model that labels wound tissue as **fibrin**, **granulation** or **callus**,
-trained on DFUTissue (Dhar et al., arXiv:2406.16012).
+## Fold-isolated architecture comparison
 
----
+Completed 20 October 2026 on CUDA using all 110 labelled DFUTissue Original
+images. A fixed seed (`12345`) formed five non-overlapping held-out folds of 22
+images. For every fold, normalization statistics and class weights were
+calculated from that fold's 88 training images only. All models trained for 80
+epochs, and the final epoch was evaluated without early stopping or checkpoint
+selection.
 
-## 1. Headline
+The predefined primary metric is mean Dice over fibrin, granulation, and callus,
+excluding background. The standard deviation is the population standard
+deviation across the five folds.
 
-> **Mean tissue Dice 0.658 ± 0.014**, 5-fold cross-validated over all 110
-> labelled images. Background excluded.
+| Model | Mean tissue Dice (SD) | Pooled-pixel tissue Dice | Mean time/fold | Peak GPU memory |
+|---|---:|---:|---:|---:|
+| MiT-B3 U-Net + scSE | **0.6512 (0.0140)** | **0.6552** | 4.14 min | 2,210 MiB |
+| ResNet34 U-Net | 0.6314 (0.0113) | 0.6356 | 1.76 min | 805 MiB |
+| ResNet34 DeepLabV3+ | 0.6353 (0.0096) | 0.6376 | **1.43 min** | **718 MiB** |
 
-The scoring rules were written and committed **before** the model was trained
-(`tissue/lib/metrics.py`, commit `cb29270`), so they could not be adjusted to
-suit a result.
+| Fold | MiT-B3 U-Net + scSE | ResNet34 U-Net | ResNet34 DeepLabV3+ |
+|---:|---:|---:|---:|
+| 1 | **0.6655** | 0.6377 | 0.6422 |
+| 2 | **0.6465** | 0.6209 | 0.6423 |
+| 3 | **0.6455** | 0.6325 | 0.6168 |
+| 4 | **0.6680** | 0.6484 | 0.6399 |
+| 5 | 0.6302 | 0.6175 | **0.6353** |
+| **Mean** | **0.6512** | 0.6314 | 0.6353 |
 
-A second number is reported alongside it, and the difference between them is
-the most interesting finding here:
+| Tissue | Metric | MiT-B3 U-Net + scSE | ResNet34 U-Net | ResNet34 DeepLabV3+ |
+|---|---|---:|---:|---:|
+| Fibrin | Mean Dice | **0.5569** | 0.5137 | 0.5158 |
+| Fibrin | Mean IoU | **0.3884** | 0.3476 | 0.3482 |
+| Granulation | Mean Dice | **0.7699** | 0.7554 | 0.7613 |
+| Granulation | Mean IoU | **0.6261** | 0.6072 | 0.6153 |
+| Callus | Mean Dice | 0.6267 | 0.6251 | **0.6289** |
+| Callus | Mean IoU | 0.4573 | 0.4556 | **0.4603** |
 
-| Measurement | Mean tissue Dice | What it answers |
-|---|---:|---|
-| 5-fold cross-validation over all 110 images | **0.658 ± 0.014** | How good is the model? |
-| The authors' own 78/16/16 split | **0.753** | How does it compare to published single-split numbers? |
+MiT-B3 U-Net + scSE led the predefined primary metric in four of five folds.
+DeepLabV3+ led fold 5, achieved the highest callus Dice and IoU, and used the
+least observed time and GPU memory. These corrected results replace the older
+comparison in which held-out images influenced preprocessing statistics.
 
-Neither is hidden in favour of the other. The cross-validated figure is the
-honest headline; the single-split figure exists so the comparison with the
-paper is like-for-like.
+## Application checkpoint: predetermined 88/22 fold
 
----
+Completed 28 October 2026 on an NVIDIA GeForce RTX 4050 Laptop GPU. The
+application checkpoint uses fold 1 of the same fixed five-fold assignment: 88
+training images and 22 held-out images. Its normalization statistics and class
+weights were computed from the 88 training images only. MiT-B3 U-Net + scSE was
+trained for 80 epochs with the fixed settings and saved without early stopping
+or best-epoch selection.
 
-## 2. Cross-validation (the honest number)
-
-Five folds of 22 images, drawn from the pooled 110, fold seed 12345. Identical
-training code and hyperparameters to the single-split run — the only difference
-is which images are held out.
-
-| Fold | Mean tissue Dice |
+| Held-out metric | Score |
 |---|---:|
-| 1 | 0.6582 |
-| 2 | 0.6683 |
-| 3 | 0.6415 |
-| 4 | 0.6762 |
-| 5 | 0.6440 |
-| **Mean** | **0.6576 ± 0.0135** |
+| Mean tissue Dice, excluding background | **0.6642** |
+| Fibrin Dice | 0.6278 |
+| Granulation Dice | 0.7697 |
+| Callus Dice | 0.5951 |
+| Fibrin IoU | 0.4575 |
+| Granulation IoU | 0.6257 |
+| Callus IoU | 0.4236 |
 
-Per class, averaged over folds:
+Training took 3.21 minutes. The local checkpoint is
+`tissue/checkpoints/tissue_custom_80_20.pt`; the local full-precision results
+and exact image memberships are in `tissue/results/custom_80_20.json`. Neither
+file is committed. The application loads the checkpoint's stored normalization
+at inference time.
 
-| Class | Dice |
-|---|---:|
-| background | 0.9316 |
-| granulation | 0.7815 |
-| callus | 0.6305 |
-| **fibrin** | **0.5609** |
+The checkpoint score is an internal held-out check, not an independent
+confirmation: the architecture was selected using results from all five folds.
+It must not replace the five-fold mean of **0.6512** in the thesis.
 
-Fibrin is the weakest class. That is expected rather than a defect: it is only
-2.9% of training pixels, absent from 21 of the 78 training images, and it is
-the weakest class for the published model too (0.6901).
+## Reproduction
 
----
+From the repository root:
 
-## 3. Is the variation real, or noise?
-
-Three sources of variation were measured separately, which is what makes the
-headline interpretable.
-
-**Randomness alone** — same split, same data, different random seeds:
-
-| Seed | Mean tissue Dice |
-|---|---:|
-| 0 | 0.7531 |
-| 1 | 0.7524 |
-| 2 | 0.7599 |
-| | **spread 0.0075** |
-
-**Different slices of data** — the five folds above: **spread ±0.0135**.
-
-**The authors' test split versus cross-validation:** 0.753 vs 0.658, a gap of
-**0.095**.
-
-That gap is about **thirteen times** the run-to-run noise and seven times the
-fold-to-fold spread. It is therefore not chance.
-
-> **Finding: the authors' 16-image test split is easier than an average slice
-> of their own dataset.** Any single-split score on DFUTissue — including the
-> published ones — should be read with that in mind.
-
-Independent supporting evidence from the same weights: the model scored
-**0.6196** on the 16-image validation set and **0.7531** on the 16-image test
-set. A 13-point gap from nothing but which 16 images were used. This is why no
-model selection or early stopping was done on the validation set.
-
----
-
-## 4. Comparison with the published model
-
-The paper's headline is **84.89** supervised and **87.64** semi-supervised. Our
-number must not be set against those directly, for two reasons.
-
-**First, the metrics differ.** From the paper's own Table 5, the proposed
-model's per-tissue scores are fibrin 69.01, granulation 94.11, callus 78.27 —
-which average to **80.46**, not 87.64. The headline is therefore computed some
-other way, most probably including the background class, which is ~80% of
-pixels and easy. The comparable figure is 80.46.
-
-**Second, the protocols differ.** Their per-tissue figures are from the
-semi-supervised model on a single split. Ours is supervised only.
-
-Like-for-like, on the same split, same metric:
-
-| Class | Ours (supervised) | Paper (semi-supervised) | Difference |
-|---|---:|---:|---:|
-| granulation | 0.911 | 0.941 | −0.030 |
-| callus | 0.733 | 0.783 | −0.050 |
-| fibrin | 0.616 | 0.690 | −0.075 |
-| **mean of the three** | **0.753** | **0.805** | **−0.051** |
-
-About five points below a semi-supervised model, using supervised training
-only, with the same ordering of classes. Our cross-validated 0.658 is stricter
-than anything the paper reports and should not be compared to their tables.
-
-IoU on the authors' split: background 0.877, granulation 0.836, callus 0.579,
-fibrin 0.445.
-
----
-
-## 5. What was trained
-
-MiT-b3 encoder with an scSE-attention CNN decoder, per the paper, built through
-`segmentation_models_pytorch`. 47.5M parameters, of which 44.1M are the encoder,
-initialised from ImageNet — with 78 training images there is nowhere near enough
-data to learn visual features from scratch.
-
-80 epochs, batch 8, AdamW at lr 1e-4, weight decay 0.01, cosine schedule, mixed
-precision. Class-weighted cross-entropy plus multiclass Dice; fibrin carries a
-loss weight of 2.12 against background's 0.076. **2.8 minutes** per run.
-
-**No early stopping and no best-epoch selection.** A fixed number of epochs is
-run and the final weights are the result, so nothing is chosen using data it is
-later scored on.
-
-**No baseline was retrained.** The paper's Table 3 already compares this
-architecture against U-Net (72.05), DeepLabV3+ (75.13) and SegFormer-b3 (80.46)
-on this exact dataset. Re-running a baseline that is already published as losing
-would add work and settle nothing.
-
----
-
-## 6. Limitations
-
-**The dataset is small.** 110 labelled images, 78 for training.
-
-**Patient identity is unknown.** DFUTissue does not publish per-patient
-identifiers, so images of the same patient may fall on both sides of a fold
-boundary. This can inflate the cross-validated score and cannot be corrected
-with the data available.
-
-**Only three tissue types exist.** Real wounds also contain necrotic tissue,
-eschar and slough. The model has no class for them and no way to say "I don't
-know", so it will assign one of its three labels with apparent confidence.
-
-> This is an open defect, not merely a scope note — shown necrotic tissue the
-> model returns a confident wrong label. Addressed by the second model proposed
-> in `docs/superpowers/specs/2026-09-24-wagner-classification-design.md` §3,
-> which adds a necrosis class from a different dataset. Not yet implemented as
-> of 2026-09-27.
-
-**The result depends on how the region is selected.** The model was trained on
-images cropped tight to a wound and has no "not a wound" class. Given a wider
-photograph it labels healthy skin as callus — on wide foot shots, callus
-reached 85–94% of predicted wound. On the same clay wound, a loose box gave
-92.4/2.2/5.4 and a tight box gave 90.3/0.0/9.7. The three percentages are
-shares of the wound and are box-size independent; the separate "share of the
-box that is wound" figure is not.
-
-**Accuracy has not been validated outside the dataset.** On 14 real wound
-photographs the model located the wound in all 14 and assigned tissue types in
-a clinically sensible way — yellow-cream centres as fibrin, surrounding red
-tissue as granulation, a callus ring on classic foot ulcers. But those images
-carry no expert labels, so this establishes plausibility, not measured accuracy.
-The clay wound model cannot validate tissue accuracy at all, since clay has no
-tissue.
-
-**Semi-supervised training was tested and rejected.** The paper gains +2.75
-from it. In earlier work on this dataset we measured +0.005 with a spread of
-±0.014 across folds — small enough to be chance — and beyond roughly 200
-pseudo-labels it actively hurt, because real labels fall to about 11% of the
-training set. Its gating step also depends on a validation set ranking runs
-correctly, which the 16-image validation set demonstrably cannot do (§3).
-
----
-
-## 7. Reproducing
-
-```bash
-py -3.11 -m venv tissue-venv
-tissue-venv/Scripts/python.exe -m pip install -r tissue/requirements.txt \
-    --extra-index-url https://download.pytorch.org/whl/cu126
-
-tissue-venv/Scripts/python.exe -m tissue.compute_stats   # normalisation, class weights
-tissue-venv/Scripts/python.exe -m tissue.train           # authors' split  (~3 min)
-tissue-venv/Scripts/python.exe -m tissue.crossval        # 5-fold + seeds  (~27 min)
-tissue-venv/Scripts/python.exe -m pytest tissue/tests/   # 37 tests
+```powershell
+.\tissue-venv\Scripts\python.exe -m tissue.compare_models
+.\tissue-venv\Scripts\python.exe -m tissue.train_custom_80_20
+.\tissue-venv\Scripts\python.exe -m pytest tissue/tests -q
 ```
 
-Training is deterministic: rerunning seed 0 after an unrelated refactor
-reproduced 0.7531 exactly.
+The comparison runner resumes missing folds. The application-checkpoint trainer
+refuses to overwrite an existing checkpoint or result file. Remove or archive
+those local outputs deliberately before retraining.
 
-Dataset access requires permission from Prof. Zeyun Yu (granted 2026-09-04 for
-nonprofit academic use, no redistribution). The data is never committed; see
-`tissue/README.md`.
+## Interpretation and limitations
+
+- These are image-level estimates because patient or wound identifiers were not
+  available for patient-grouped splitting.
+- The three supported tissue labels are fibrin, granulation, and callus. The
+  model cannot reliably identify unsupported tissue types.
+- Results measure agreement with DFUTissue pixel labels. They do not establish
+  clinical validity or end-to-end physical-measurement accuracy.
+- Region selection still matters because training images are tightly cropped to
+  the wound and the model has no separate healthy-skin or unknown class.
+- Dataset permission is for nonprofit academic use with no redistribution. The
+  dataset, masks, checkpoints, and raw experiment outputs must remain local.

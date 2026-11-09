@@ -67,7 +67,9 @@ reading, since granulation is healthy tissue and fibrin is not.
 
 Computed by `tissue-venv/Scripts/python.exe -m tissue.compute_stats`, from the
 **78 training images only** — taking them from validation or test would leak
-information about those images into training. Written to `configs/stats.json`.
+information about those images into training. Written to `configs/stats.json`
+for the archived authors-split checkpoint. The current 88/22 application
+checkpoint stores its own normalization calculated from its 88 training images.
 
 Normalisation mean `[0.6701, 0.5076, 0.4445]`, std `[0.2437, 0.2068, 0.1932]`.
 
@@ -85,12 +87,18 @@ predicting "background" almost everywhere.
 ### Fold-isolated model comparison
 
 The original `configs/stats.json` is for the authors' 78-image training split and
-for the deployed single-split model. The five-fold comparison now calculates
+its archived single-split model. The five-fold comparison calculates
 normalization statistics and class weights separately from each fold's 88
 training images. Its 22 held-out images are never used to calculate those
 values. The runner passes the fold-specific values to both the training and
 evaluation datasets and to the training loss; it does not overwrite
 `configs/stats.json`.
+
+The application checkpoint was trained separately on the predetermined first
+88/22 fold with `python -m tissue.train_custom_80_20`. Its held-out score is an
+internal check, not an independent validation of the architecture selected
+from all five folds. The application reads that checkpoint's stored
+normalization at inference time.
 
 From the repository root, run the full comparison on the training GPU:
 

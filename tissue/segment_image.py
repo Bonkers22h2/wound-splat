@@ -33,12 +33,14 @@ from tissue.lib.inference import (
 )
 from tissue.lib.model import build_model
 
-DEFAULT_CHECKPOINT = CONFIGS.parent / "checkpoints" / "tissue_official_split.pt"
+DEFAULT_CHECKPOINT = CONFIGS.parent / "checkpoints" / "tissue_custom_80_20.pt"
 
 
 def load_model(checkpoint_path, device):
     model = build_model(num_classes=4, pretrained=False)
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device)["model"])
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    model.load_state_dict(checkpoint["model"])
+    model.tissue_normalization = checkpoint.get("normalization")
     return model.to(device).eval()
 
 

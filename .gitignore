@@ -98,6 +98,7 @@ gaussian-splatting/submodules/fused-ssim/
 /*_workplan_*.png
 
 # Generated document previews and QA scratch directories
+/_audit_*/
 /_qa_*/
 /qa_*/
 /rendered_*/
