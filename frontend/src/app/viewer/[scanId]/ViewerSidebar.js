@@ -101,8 +101,8 @@ export default function ViewerSidebar({
 }) {
   return (
     <div style={{
-      width: '280px', background: 'white', borderLeft: `1px solid ${COLORS.border}`,
-      padding: '1.5rem', overflowY: 'auto',
+      width: '300px', background: 'white', borderLeft: `1px solid ${COLORS.border}`,
+      padding: '1.25rem', overflowY: 'auto',
     }}>
       <h2 style={{ fontWeight: 700, fontSize: '16px', marginBottom: '0.5rem' }}>3D Wound View</h2>
       <p style={{ color: COLORS.textMuted, fontSize: '13px', marginBottom: '1.5rem' }}>

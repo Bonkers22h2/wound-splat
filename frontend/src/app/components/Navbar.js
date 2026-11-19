@@ -6,40 +6,17 @@ export default function Navbar() {
   const pathname = usePathname()
 
   return (
-    <nav style={{
-      background: '#0F6E56',
-      padding: '0 2rem',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      height: '56px',
-      position: 'sticky',
-      top: 0,
-      zIndex: 100
-    }}>
-      <Link href="/" style={{ color: 'white', fontWeight: 700, fontSize: '18px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '20px' }}>⚕</span> Wound-Splat
+    <nav className="app-nav">
+      <Link href="/" className="brand">
+        <span className="brand-mark" aria-hidden="true">WS</span>
+        <span>Wound-Splat</span>
       </Link>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <Link href="/patient" style={{
-          color: 'white',
-          textDecoration: 'none',
-          padding: '6px 16px',
-          borderRadius: '6px',
-          fontSize: '14px',
-          background: pathname === '/patient' ? 'rgba(255,255,255,0.2)' : 'transparent'
-        }}>
+      <div className="nav-links">
+        <Link href="/patient" className={`nav-link ${pathname === '/patient' ? 'active' : ''}`}>
           Patient Portal
         </Link>
-        <Link href="/admin" style={{
-          color: 'white',
-          textDecoration: 'none',
-          padding: '6px 16px',
-          borderRadius: '6px',
-          fontSize: '14px',
-          background: pathname === '/admin' ? 'rgba(255,255,255,0.2)' : 'transparent'
-        }}>
-          Clinical Admin
+        <Link href="/admin" className={`nav-link ${pathname === '/admin' ? 'active' : ''}`}>
+          Clinical Workspace
         </Link>
       </div>
     </nav>

@@ -1,29 +1,25 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import Navbar from '../components/Navbar'
 import { patientApi, scanApi } from '@/lib/api'
-import { STATUS_STYLE } from '@/lib/theme'
+import { DEMO_PATIENT, DEMO_SCANS } from '@/lib/demo'
 
-// Known-size objects the backend can detect for absolute-scale calibration.
-// Values must match REFERENCE_CHOICES in backend/app/services/scale_calibration.py.
-// '' is the unchosen placeholder and NO_REFERENCE is a deliberate "I used
-// nothing" - keeping them apart is what lets Submit insist on a real answer,
-// so a wrong default can't quietly calibrate the scan against the wrong object.
 const NO_REFERENCE = 'none'
 const REFERENCE_OPTIONS = [
-  { value: NO_REFERENCE, label: 'No reference (physical sizes unavailable)' },
-  { value: 'card', label: 'Bank/ID card (recommended)' },
-  { value: 'coin:us_quarter', label: 'Coin – US quarter' },
-  { value: 'coin:us_nickel', label: 'Coin – US nickel' },
-  { value: 'coin:us_penny', label: 'Coin – US penny' },
-  { value: 'coin:us_dime', label: 'Coin – US dime' },
-  { value: 'coin:eur_1', label: 'Coin – 1 euro' },
-  { value: 'coin:eur_2', label: 'Coin – 2 euro' },
-  { value: 'coin:gbp_1', label: 'Coin – UK £1' },
-  { value: 'coin:php_1', label: 'Coin – ₱1 peso' },
-  { value: 'coin:php_5', label: 'Coin – ₱5 NGC, silver-colored (25 mm)' },
-  { value: 'coin:php_5_bsp', label: 'Coin – ₱5 BSP, older gold-colored (27 mm)' },
-  { value: 'coin:php_10', label: 'Coin – ₱10 peso' },
+  { value: NO_REFERENCE, label: 'No reference — sizes unavailable' },
+  { value: 'card', label: 'Bank / ID card' },
+  { value: 'coin:us_quarter', label: 'US quarter' },
+  { value: 'coin:us_nickel', label: 'US nickel' },
+  { value: 'coin:us_penny', label: 'US penny' },
+  { value: 'coin:us_dime', label: 'US dime' },
+  { value: 'coin:eur_1', label: '1 euro coin' },
+  { value: 'coin:eur_2', label: '2 euro coin' },
+  { value: 'coin:gbp_1', label: 'UK £1 coin' },
+  { value: 'coin:php_1', label: '₱1 peso' },
+  { value: 'coin:php_5', label: '₱5 silver-colored coin' },
+  { value: 'coin:php_5_bsp', label: 'Older ₱5 gold-colored coin' },
+  { value: 'coin:php_10', label: '₱10 peso' },
 ]
 
 export default function PatientPage() {
@@ -34,16 +30,25 @@ export default function PatientPage() {
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
   const [messageIsError, setMessageIsError] = useState(false)
-  const [step, setStep] = useState('login') // login | portal
+  const [step, setStep] = useState('login')
   const [referenceObject, setReferenceObject] = useState('')
   const [selectedFile, setSelectedFile] = useState(null)
+  const [tab, setTab] = useState('overview')
   const fileRef = useRef()
 
   const handleLogin = async () => {
-    if (!patientCode) return
+    if (!patientCode.trim()) return
+    if (patientCode.trim().toUpperCase() === DEMO_PATIENT.patient_code) {
+      setPatientId(DEMO_PATIENT.id)
+      setPatientName(DEMO_PATIENT.name)
+      setScans(DEMO_SCANS)
+      setStep('portal')
+      setMessage('')
+      return
+    }
     try {
       const patients = await patientApi.list()
-      const found = patients.find(p => p.patient_code === patientCode)
+      const found = patients.find(p => p.patient_code === patientCode.trim())
       if (found) {
         setPatientId(found.id)
         setPatientName(found.name)
@@ -53,20 +58,16 @@ export default function PatientPage() {
         setMessage('Patient code not found. Please contact your clinic.')
       }
     } catch {
-      setMessage('Could not connect to server.')
+      setMessage('Could not connect to the server.')
     }
   }
 
   const loadScans = async (pid) => {
-    try {
-      setScans(await scanApi.listForPatient(pid))
-    } catch { }
+    try { setScans(await scanApi.listForPatient(pid)) } catch {}
   }
 
-  // Picking a file only stages it. Nothing is sent until Submit, so the video
-  // and the size reference reach the backend as one request.
-  const handleFileChange = (e) => {
-    setSelectedFile(e.target.files[0] || null)
+  const handleFileChange = (event) => {
+    setSelectedFile(event.target.files[0] || null)
     setMessage('')
   }
 
@@ -77,16 +78,13 @@ export default function PatientPage() {
     setUploading(true)
     setMessage('')
     try {
-      // NO_REFERENCE is a UI-only value; the backend rejects anything outside
-      // its REFERENCE_CHOICES, so send nothing at all in that case.
       const reference = referenceObject === NO_REFERENCE ? null : referenceObject
       const data = await scanApi.upload(patientId, selectedFile, reference)
       if (data.scan_id) {
         setMessageIsError(false)
-        setMessage('Video uploaded successfully. Processing will begin shortly.')
+        setMessage('Video uploaded successfully. Processing has started.')
         setSelectedFile(null)
-        // Clear the input too, or re-picking the same file fires no change
-        // event and the form looks stuck.
+        setReferenceObject('')
         if (fileRef.current) fileRef.current.value = ''
         loadScans(patientId)
       } else {
@@ -96,184 +94,171 @@ export default function PatientPage() {
     } catch {
       setMessageIsError(true)
       setMessage('Upload failed. Please try again.')
+    } finally {
+      setUploading(false)
     }
-    setUploading(false)
   }
 
   useEffect(() => {
-    if (step === 'portal' && patientId) {
-      const interval = setInterval(() => loadScans(patientId), 10000)
-      return () => clearInterval(interval)
-    }
+    if (step !== 'portal' || !patientId) return
+    const interval = setInterval(() => loadScans(patientId), 10000)
+    return () => clearInterval(interval)
   }, [step, patientId])
 
   if (step === 'login') return (
     <>
       <Navbar />
-      <main style={{ maxWidth: '400px', margin: '6rem auto', padding: '0 1rem' }}>
-        <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #e5e7eb' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '0.5rem' }}>Patient Portal</h1>
-          <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '14px' }}>Enter your patient code to access your wound scans.</p>
-          <input
-            type="text"
-            placeholder="Patient code (e.g. PT-001)"
-            value={patientCode}
-            onChange={e => setPatientCode(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '1rem', fontSize: '14px' }}
-          />
-          <button onClick={handleLogin} style={{
-            width: '100%', background: '#0F6E56', color: 'white',
-            padding: '10px', borderRadius: '8px', border: 'none',
-            fontWeight: 600, cursor: 'pointer', fontSize: '14px'
-          }}>
-            Access my scans
-          </button>
-          {message && <p style={{ marginTop: '1rem', color: '#991b1b', fontSize: '13px' }}>{message}</p>}
-        </div>
+      <main className="auth-shell">
+        <section className="auth-panel">
+          <div style={{ maxWidth:'420px', width:'100%', margin:'0 auto' }}>
+            <div className="eyebrow">Patient access</div>
+            <h1 style={{ fontSize:'32px', letterSpacing:'-.035em', marginBottom:'8px' }}>Welcome back</h1>
+            <p className="helper" style={{ marginBottom:'28px' }}>Enter the patient code provided by your clinic.</p>
+            <div className="field" style={{ marginBottom:'14px' }}>
+              <label className="label" htmlFor="patient-code">Patient code</label>
+              <input id="patient-code" className="input" value={patientCode} onChange={e => { setPatientCode(e.target.value); setMessage('') }}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()} placeholder="e.g. PT-001" />
+            </div>
+            <button className="btn btn-primary btn-block" onClick={handleLogin} disabled={!patientCode.trim()}>
+              Access my scans
+            </button>
+            {message && <div className="notice notice-error" style={{ marginTop:'14px' }}>{message}</div>}
+            <p className="helper" style={{ textAlign:'center', marginTop:'22px' }}>
+              Need help? <span style={{ color:'#0F766E', fontWeight:700 }}>Contact your clinic</span>
+            </p>
+          </div>
+        </section>
+        <aside className="auth-aside">
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', fontWeight:750 }}>
+            <span className="brand-mark" style={{ background:'rgba(255,255,255,.14)' }}>WS</span> Wound-Splat
+          </div>
+          <div>
+            <div style={{ fontSize:'12px', opacity:.72, marginBottom:'14px', textTransform:'uppercase', letterSpacing:'0.12em' }}>Your care timeline</div>
+            <h2>Monitor healing with a clearer view.</h2>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px' }}>
+            {['Upload','Process','Review'].map((item,i) => (
+              <div key={item} style={{ borderTop:'1px solid rgba(255,255,255,.22)', paddingTop:'12px' }}>
+                <div style={{ opacity:.6, fontSize:'11px' }}>0{i+1}</div><strong style={{ fontSize:'13px' }}>{item}</strong>
+              </div>
+            ))}
+          </div>
+        </aside>
       </main>
     </>
   )
 
+  const latest = scans[0]
   return (
     <>
       <Navbar />
-      <main style={{ maxWidth: '760px', margin: '0 auto', padding: '2rem 1rem' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Welcome, {patientName}</h1>
-          <p style={{ color: '#6b7280', fontSize: '14px' }}>Patient code: {patientCode}</p>
-        </div>
-
-        <div style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #e5e7eb', marginBottom: '2rem' }}>
-          <h2 style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Upload Smartphone Video</h2>
-          <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '1.5rem' }}>
-            Capture a steady 360-degree sweep around the wound. Include 1–2 cm of healthy
-            skin around the wound, and lay a bank card or coin flat on the skin next to it
-            so measurements come out in real centimeters.
-          </p>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '0.4rem' }}>
-              Size reference placed next to the wound
-            </label>
-            <select
-              value={referenceObject}
-              onChange={e => setReferenceObject(e.target.value)}
-              style={{
-                width: '100%', padding: '10px 14px', borderRadius: '8px',
-                border: '1px solid #d1d5db', fontSize: '14px', background: 'white'
-              }}
-            >
-              <option value="" disabled>— Select what you placed next to the wound —</option>
-              {REFERENCE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          <div
-            onClick={() => fileRef.current.click()}
-            style={{
-              border: '2px dashed #d1d5db', borderRadius: '8px',
-              padding: '3rem', textAlign: 'center', cursor: 'pointer',
-              background: '#f9fafb'
-            }}
-          >
-            {selectedFile ? (
-              <>
-                <div style={{ fontSize: '32px', marginBottom: '0.5rem' }}>🎬</div>
-                <p style={{ fontWeight: 500, marginBottom: '0.25rem' }}>{selectedFile.name}</p>
-                <p style={{ color: '#9ca3af', fontSize: '13px' }}>
-                  {(selectedFile.size / 1024 / 1024).toFixed(1)} MB · Click to choose a different video
-                </p>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: '32px', marginBottom: '0.5rem' }}>☁️</div>
-                <p style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Click to browse or drag and drop</p>
-                <p style={{ color: '#9ca3af', fontSize: '13px' }}>MP4, MOV up to 100MB</p>
-              </>
-            )}
-            <input ref={fileRef} type="file" accept="video/*" onChange={handleFileChange} style={{ display: 'none' }} />
-          </div>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            style={{
-              width: '100%', marginTop: '1.5rem',
-              background: canSubmit ? '#0F6E56' : '#d1d5db',
-              color: 'white', padding: '10px', borderRadius: '8px', border: 'none',
-              fontWeight: 600, fontSize: '14px',
-              cursor: canSubmit ? 'pointer' : 'not-allowed'
-            }}
-          >
-            {uploading ? 'Uploading…' : 'Submit scan'}
-          </button>
-          {!uploading && !canSubmit && (
-            <p style={{ marginTop: '0.75rem', color: '#9ca3af', fontSize: '13px', textAlign: 'center' }}>
-              {!selectedFile && !referenceObject
-                ? 'Choose a size reference and a video to submit.'
-                : !selectedFile ? 'Choose a video to submit.' : 'Choose the size reference you placed next to the wound.'}
-            </p>
-          )}
-          {message && (
-            <p style={{ marginTop: '1rem', color: messageIsError ? '#991b1b' : '#065f46', fontSize: '14px' }}>
-              {message}
-            </p>
-          )}
-        </div>
-
-        <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e5e7eb' }}>
-            <h2 style={{ fontWeight: 600 }}>Your 3D Scans</h2>
-          </div>
-          {scans.length === 0 ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: '#9ca3af' }}>
-              No scans yet. Upload a video to get started.
+      <main className="page">
+        <div className="page-container">
+          <div className="page-header">
+            <div>
+              <div className="eyebrow">Patient portal</div>
+              <h1 className="page-title">Good morning, {patientName}</h1>
+              <p className="page-subtitle">Patient code · <strong style={{ color:'#334155' }}>{patientCode}</strong></p>
             </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f9fafb' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>FILE</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>STATUS</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>DATE</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scans.map((scan, i) => (
-                  <tr key={scan.id} style={{ borderTop: i > 0 ? '1px solid #f3f4f6' : 'none' }}>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{scan.video_filename}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        ...STATUS_STYLE[scan.status],
-                        padding: '2px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 500
-                      }}>
-                        {scan.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>
-                      {new Date(scan.created_at).toLocaleDateString()}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      {scan.status === 'rendered' && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <a href={`/viewer/${scan.id}`} style={{ color: '#0F6E56', fontSize: '13px', fontWeight: 500 }}>
-                            View 3D
-                          </a>
-                          <span style={{ color: '#d1d5db' }}>|</span>
-                          <a href={`/api/reports/${scan.id}/pdf`} style={{ color: '#6b7280', fontSize: '13px' }}>
-                            PDF
-                          </a>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <button className="btn btn-primary" onClick={() => setTab('upload')}>Upload new scan</button>
+          </div>
+
+          <div className="tabs" style={{ marginBottom:'18px' }}>
+            {['overview','history','upload','profile'].map(item => (
+              <button key={item} className={`tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>
+                {item[0].toUpperCase()+item.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'overview' && (
+            <>
+              <div className="grid-3" style={{ marginBottom:'16px' }}>
+                <div className="stat-card"><div className="stat-label">Latest scan</div><div className="stat-value">{latest ? new Date(latest.created_at).toLocaleDateString() : '—'}</div><div className="stat-meta">{latest?.status || 'No scans yet'}</div></div>
+                <div className="stat-card"><div className="stat-label">Total scans</div><div className="stat-value">{scans.length}</div><div className="stat-meta">Longitudinal history</div></div>
+                <div className="stat-card"><div className="stat-label">Latest status</div><div style={{ marginTop:'9px' }}><span className={`status status-${latest?.status || 'queued'}`}>{latest?.status || 'Ready to begin'}</span></div><div className="stat-meta">Updated automatically</div></div>
+              </div>
+              <div className="card">
+                <div className="card-header"><h2 className="card-title">Recent scans</h2><button className="tab" onClick={() => setTab('history')}>View history</button></div>
+                <ScanTable scans={scans} />
+              </div>
+            </>
+          )}
+
+          {tab === 'history' && (
+            <div className="card"><div className="card-header"><h2 className="card-title">Scan history</h2><span className="muted" style={{ fontSize:'12px' }}>{scans.length} scans</span></div><ScanTable scans={scans} /></div>
+          )}
+
+          {tab === 'upload' && (
+            <div className="grid-2" style={{ alignItems:'start' }}>
+              <div className="card">
+                <div className="card-header"><h2 className="card-title">Upload a wound video</h2><span className="status status-warning">Size reference required</span></div>
+                <div className="card-body">
+                  <div className="field" style={{ marginBottom:'16px' }}>
+                    <label className="label" htmlFor="reference">Size reference in the recording</label>
+                    <select id="reference" className="select" value={referenceObject} onChange={e => setReferenceObject(e.target.value)}>
+                      <option value="" disabled>Select the reference object</option>
+                      {REFERENCE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div onClick={() => fileRef.current?.click()} style={{ border:'1.5px dashed #CBD5E1', borderRadius:'12px', background:'#F8FAFC', minHeight:'210px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', textAlign:'center', padding:'24px' }}>
+                    <div style={{ width:'48px', height:'48px', borderRadius:'12px', background:'#E0F2FE', color:'#0284C7', display:'grid', placeItems:'center', marginBottom:'12px', fontWeight:800 }}>{selectedFile ? '✓' : '＋'}</div>
+                    <strong style={{ fontSize:'14px', marginBottom:'5px' }}>{selectedFile ? selectedFile.name : 'Choose a wound video'}</strong>
+                    <span className="helper">{selectedFile ? `${(selectedFile.size/1024/1024).toFixed(1)} MB · Click to change` : 'MP4 or MOV · up to 100 MB'}</span>
+                    <input ref={fileRef} type="file" accept="video/*" onChange={handleFileChange} style={{ display:'none' }} />
+                  </div>
+                  <button className="btn btn-primary btn-block" style={{ marginTop:'16px' }} onClick={handleSubmit} disabled={!canSubmit}>
+                    {uploading ? 'Uploading…' : 'Submit scan'}
+                  </button>
+                  {message && <div className={`notice ${messageIsError?'notice-error':'notice-success'}`} style={{ marginTop:'12px' }}>{message}</div>}
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-header"><h2 className="card-title">Before you record</h2></div>
+                <div className="card-body">
+                  {[
+                    ['1','Set the reference','Place a matching coin or bank card flat next to the wound.'],
+                    ['2','Improve visibility','Use bright, even lighting. Avoid glare and shadows.'],
+                    ['3','Capture steadily','Move slowly around the wound, keeping it fully in frame.'],
+                    ['4','Keep privacy in mind','Use the agreed recording location and approved device.'],
+                  ].map(([n,title,text]) => (
+                    <div key={n} style={{ display:'flex', gap:'12px', padding:'10px 0' }}>
+                      <span style={{ width:'26px', height:'26px', flex:'0 0 26px', borderRadius:'50%', background:'#F0FDFA', color:'#0F766E', display:'grid', placeItems:'center', fontSize:'12px', fontWeight:800 }}>{n}</span>
+                      <div><strong style={{ display:'block', fontSize:'13px', marginBottom:'3px' }}>{title}</strong><p className="helper">{text}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'profile' && (
+            <div className="card" style={{ maxWidth:'720px' }}>
+              <div className="card-header"><h2 className="card-title">Patient profile</h2></div>
+              <div className="card-body grid-2">
+                <div className="field"><label className="label">Name</label><input className="input" value={patientName} readOnly /></div>
+                <div className="field"><label className="label">Patient code</label><input className="input" value={patientCode} readOnly /></div>
+              </div>
+            </div>
           )}
         </div>
       </main>
     </>
+  )
+}
+
+function ScanTable({ scans }) {
+  if (!scans.length) return <div className="empty"><div className="empty-icon">＋</div><strong style={{ color:'#334155', marginBottom:'5px' }}>No wound scans yet</strong><span style={{ fontSize:'13px' }}>Upload a video to begin your first scan.</span></div>
+  return (
+    <div className="table-wrap"><table className="table"><thead><tr><th>Video</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody>
+      {scans.map(scan => (
+        <tr key={scan.id}>
+          <td><strong>{scan.video_filename}</strong></td>
+          <td><span className={`status status-${scan.status}`}>{scan.status}</span></td>
+          <td className="muted">{new Date(scan.created_at).toLocaleString()}</td>
+          <td>{scan.status === 'rendered' ? <div style={{ display:'flex', gap:'12px' }}><Link href={`/viewer/${scan.id}`} style={{ color:'#0F766E', fontWeight:700, textDecoration:'none' }}>View 3D</Link><a href={`/api/reports/${scan.id}/pdf`} style={{ color:'#64748B', textDecoration:'none' }}>PDF</a></div> : '—'}</td>
+        </tr>
+      ))}
+    </tbody></table></div>
   )
 }
