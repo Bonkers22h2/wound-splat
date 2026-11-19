@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Navbar from '../components/Navbar'
+import { Icon } from '../components/Icons'
 import { patientApi, scanApi } from '@/lib/api'
 import { DEMO_PATIENT, DEMO_SCANS } from '@/lib/demo'
 
@@ -164,9 +165,12 @@ export default function PatientPage() {
           </div>
 
           <div className="tabs" style={{ marginBottom:'18px' }}>
-            {['overview','history','upload','profile'].map(item => (
-              <button key={item} className={`tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>
-                {item[0].toUpperCase()+item.slice(1)}
+            {[
+              ['overview','Grid','Overview'],['history','Clock','History'],
+              ['upload','Upload','Upload scan'],['profile','Patient','Profile'],
+            ].map(([key,icon,label]) => (
+              <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)} style={{ display:'flex', alignItems:'center', gap:'7px' }}>
+                <Icon name={icon.toLowerCase()} size={15} />{label}
               </button>
             ))}
           </div>
@@ -174,9 +178,9 @@ export default function PatientPage() {
           {tab === 'overview' && (
             <>
               <div className="grid-3" style={{ marginBottom:'16px' }}>
-                <div className="stat-card"><div className="stat-label">Latest scan</div><div className="stat-value">{latest ? new Date(latest.created_at).toLocaleDateString() : '—'}</div><div className="stat-meta">{latest?.status || 'No scans yet'}</div></div>
-                <div className="stat-card"><div className="stat-label">Total scans</div><div className="stat-value">{scans.length}</div><div className="stat-meta">Longitudinal history</div></div>
-                <div className="stat-card"><div className="stat-label">Latest status</div><div style={{ marginTop:'9px' }}><span className={`status status-${latest?.status || 'queued'}`}>{latest?.status || 'Ready to begin'}</span></div><div className="stat-meta">Updated automatically</div></div>
+                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="clock" size={14}/> Latest scan</span></div><div className="stat-value">{latest ? new Date(latest.created_at).toLocaleDateString() : '—'}</div><div className="stat-meta">{latest?.status || 'No scans yet'}</div></div>
+                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="activity" size={14}/> Total scans</span></div><div className="stat-value">{scans.length}</div><div className="stat-meta">Longitudinal history</div></div>
+                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="eye" size={14}/> Latest status</span></div><div style={{ marginTop:'9px' }}><span className={`status status-${latest?.status || 'queued'}`}>{latest?.status || 'Ready to begin'}</span></div><div className="stat-meta">Updated automatically</div></div>
               </div>
               <div className="card">
                 <div className="card-header"><h2 className="card-title">Recent scans</h2><button className="tab" onClick={() => setTab('history')}>View history</button></div>

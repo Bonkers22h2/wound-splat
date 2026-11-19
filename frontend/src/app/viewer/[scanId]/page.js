@@ -32,7 +32,7 @@ export default function ViewerPage() {
           <div ref={viewer.mountRef} style={{ width: '100%', height: '100%' }} />
           {String(scanId).startsWith('demo-') && (
             <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', pointerEvents:'none' }}>
-              <div style={{ width:'min(44vw,380px)', aspectRatio:'1', borderRadius:'50%', background:'radial-gradient(circle at 48% 48%,#10B981 0 18%,#F59E0B 19% 40%,#991B1B 41% 47%,rgba(16,185,129,.20) 48% 67%,rgba(59,130,246,.12) 68% 76%,transparent 77%)', boxShadow:'0 26px 80px rgba(16,185,129,.20), inset 0 0 30px rgba(255,255,255,.10)', transform:'perspective(600px) rotateX(8deg)' }}>
+              <div style={{ width:'min(44vw,380px)', aspectRatio:'1', borderRadius:'50%', background:'radial-gradient(circle at 48% 48%,#10B981 0 18%,#F59E0B 19% 40%,#3B82F6 41% 47%,rgba(16,185,129,.20) 48% 67%,rgba(59,130,246,.12) 68% 76%,transparent 77%)', boxShadow:'0 26px 80px rgba(16,185,129,.20), inset 0 0 30px rgba(255,255,255,.10)', transform:'perspective(600px) rotateX(8deg)' }}>
                 <div style={{ position:'relative', width:'100%', height:'100%', borderRadius:'50%', border:'1px solid rgba(226,232,240,.12)' }} />
               </div>
             </div>

@@ -86,7 +86,7 @@ function TissueSelection({ scanId }) {
         {demoMode ? (
           <div className="card" style={{ padding:'12px' }}>
             <div style={{ position:'relative', height:'430px', borderRadius:'10px', overflow:'hidden', background:'linear-gradient(135deg,#E7ECF0,#F8FAFC)' }}>
-              <div style={{ position:'absolute', left:'18%', top:'20%', width:'64%', height:'60%', border:'2px solid #10B981', borderRadius:'50%', background:'radial-gradient(circle,#10B981 0 18%,#F59E0B 19% 43%,#991B1B 44% 49%,rgba(59,130,246,.35) 50% 68%,rgba(16,185,129,.12) 69%)', boxShadow:'0 18px 40px rgba(15,23,42,.12)' }}>
+              <div style={{ position:'absolute', left:'18%', top:'20%', width:'64%', height:'60%', border:'2px solid #10B981', borderRadius:'50%', background:'radial-gradient(circle,#10B981 0 18%,#F59E0B 19% 43%,#3B82F6 44% 49%,rgba(59,130,246,.35) 50% 68%,rgba(16,185,129,.12) 69%)', boxShadow:'0 18px 40px rgba(15,23,42,.12)' }}>
                 {['nw','ne','sw','se'].map(corner => (
                   <span key={corner} style={{ position:'absolute', width:'14px', height:'14px', borderRadius:'50%', border:'2px solid white', background:'#0F766E', top:corner.includes('n')?'-7px':'auto', bottom:corner.includes('s')?'-7px':'auto', left:corner.includes('w')?'-7px':'auto', right:corner.includes('e')?'-7px':'auto' }} />
                 ))}

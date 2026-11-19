@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Navbar from '../components/Navbar'
+import { Icon } from '../components/Icons'
 import { patientApi, scanApi } from '@/lib/api'
 import { DEMO_PATIENT, DEMO_QUEUE } from '@/lib/demo'
 
@@ -73,9 +74,11 @@ export default function AdminPage() {
           </div>
 
           <div className="tabs" style={{ marginBottom:'18px' }}>
-            {['queue','patients','register'].map(item => (
-              <button key={item} className={`tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>
-                {item === 'queue' ? 'Processing queue' : item === 'patients' ? 'Patients' : 'Register patient'}
+            {[
+              ['queue','activity','Processing queue'],['patients','patient','Patients'],['register','plus','Register patient'],
+            ].map(([key,icon,label]) => (
+              <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)} style={{ display:'flex', alignItems:'center', gap:'7px' }}>
+                <Icon name={icon} size={15} />{label}
               </button>
             ))}
           </div>

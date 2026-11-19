@@ -45,7 +45,7 @@ export default function Home() {
               <div className="card" style={{ overflow:'hidden', boxShadow:'0 24px 60px rgba(15,23,42,.10)' }}>
                 <div style={{ height:'410px', position:'relative', overflow:'hidden', background:'radial-gradient(circle at 48% 48%,#1E293B 0,#111827 48%,#030712 100%)' }}>
                   <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(30,41,59,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(30,41,59,.22) 1px,transparent 1px)', backgroundSize:'40px 40px', transform:'perspective(500px) rotateX(58deg) scale(1.35)', transformOrigin:'bottom' }} />
-                  <div style={{ position:'absolute', left:'50%', top:'51%', width:'180px', height:'180px', transform:'translate(-50%,-50%)', borderRadius:'50%', background:'radial-gradient(circle,#10B981 0 18%,#F59E0B 19% 42%,#991B1B 43% 48%,rgba(16,185,129,.18) 49% 70%,transparent 71%)', boxShadow:'0 0 44px rgba(16,185,129,.22)' }} />
+                  <div style={{ position:'absolute', left:'50%', top:'51%', width:'180px', height:'180px', transform:'translate(-50%,-50%)', borderRadius:'50%', background:'radial-gradient(circle,#10B981 0 18%,#F59E0B 19% 42%,#3B82F6 43% 48%,rgba(16,185,129,.18) 49% 70%,transparent 71%)', boxShadow:'0 0 44px rgba(16,185,129,.22)' }} />
                   <div style={{ position:'absolute', top:'16px', right:'16px' }} className="status status-rendered">Model rendered</div>
                   <div style={{ position:'absolute', bottom:'14px', left:'14px', right:'14px', display:'flex', justifyContent:'space-between', color:'#CBD5E1', fontSize:'11px' }}>
                     <span>3DGS reconstruction</span><span>Drag · Zoom · Rotate</span>
