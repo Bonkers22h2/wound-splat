@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import Navbar from '../components/Navbar'
 import { Icon } from '../components/Icons'
 import { patientApi, scanApi } from '@/lib/api'
@@ -131,7 +132,7 @@ export default function PatientPage() {
         </section>
         <aside className="auth-aside">
           <div style={{ display:'flex', alignItems:'center', gap:'10px', fontWeight:750 }}>
-            <span className="brand-mark" style={{ background:'rgba(255,255,255,.14)' }}>WS</span> Wound-Splat
+            <span className="brand-mark"><Image src="/wound-splat-logo.png" alt="" fill sizes="38px" /></span> Wound-Splat
           </div>
           <div>
             <div style={{ fontSize:'12px', opacity:.72, marginBottom:'14px', textTransform:'uppercase', letterSpacing:'0.12em' }}>Your care timeline</div>
@@ -178,9 +179,9 @@ export default function PatientPage() {
           {tab === 'overview' && (
             <>
               <div className="grid-3" style={{ marginBottom:'16px' }}>
-                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="clock" size={14}/> Latest scan</span></div><div className="stat-value">{latest ? new Date(latest.created_at).toLocaleDateString() : '—'}</div><div className="stat-meta">{latest?.status || 'No scans yet'}</div></div>
-                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="activity" size={14}/> Total scans</span></div><div className="stat-value">{scans.length}</div><div className="stat-meta">Longitudinal history</div></div>
-                <div className="stat-card"><div className="stat-label"><span style={{ display:'inline-flex', alignItems:'center', gap:'6px' }}><Icon name="eye" size={14}/> Latest status</span></div><div style={{ marginTop:'9px' }}><span className={`status status-${latest?.status || 'queued'}`}>{latest?.status || 'Ready to begin'}</span></div><div className="stat-meta">Updated automatically</div></div>
+                <div className="metric-card"><div className="metric-head"><span>Latest scan</span><span className="metric-icon"><Icon name="clock" size={16}/></span></div><div className="metric-value">{latest ? new Date(latest.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</div><div className="metric-meta">{latest?.status || 'No scans yet'}</div></div>
+                <div className="metric-card"><div className="metric-head"><span>Total scans</span><span className="metric-icon"><Icon name="activity" size={16}/></span></div><div className="metric-value">{scans.length}</div><div className="metric-meta">Longitudinal history</div></div>
+                <div className="metric-card"><div className="metric-head"><span>Latest status</span><span className="metric-icon"><Icon name="eye" size={16}/></span></div><div style={{ marginTop:'11px' }}><span className={`status status-${latest?.status || 'queued'}`}>{latest?.status || 'Ready to begin'}</span></div><div className="metric-meta">Updated automatically</div></div>
               </div>
               <div className="card">
                 <div className="card-header"><h2 className="card-title">Recent scans</h2><button className="tab" onClick={() => setTab('history')}>View history</button></div>
@@ -205,8 +206,8 @@ export default function PatientPage() {
                       {REFERENCE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                   </div>
-                  <div onClick={() => fileRef.current?.click()} style={{ border:'1.5px dashed #CBD5E1', borderRadius:'12px', background:'#F8FAFC', minHeight:'210px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', textAlign:'center', padding:'24px' }}>
-                    <div style={{ width:'48px', height:'48px', borderRadius:'12px', background:'#E0F2FE', color:'#0284C7', display:'grid', placeItems:'center', marginBottom:'12px', fontWeight:800 }}>{selectedFile ? '✓' : '＋'}</div>
+                  <div className="upload-panel" onClick={() => fileRef.current?.click()}>
+                    <div className="upload-icon">{selectedFile ? '✓' : '＋'}</div>
                     <strong style={{ fontSize:'14px', marginBottom:'5px' }}>{selectedFile ? selectedFile.name : 'Choose a wound video'}</strong>
                     <span className="helper">{selectedFile ? `${(selectedFile.size/1024/1024).toFixed(1)} MB · Click to change` : 'MP4 or MOV · up to 100 MB'}</span>
                     <input ref={fileRef} type="file" accept="video/*" onChange={handleFileChange} style={{ display:'none' }} />

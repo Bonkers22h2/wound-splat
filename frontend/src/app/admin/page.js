@@ -105,8 +105,8 @@ export default function AdminPage() {
                               <div style={{ fontSize:'12px', color:'#475569', marginBottom:'6px' }}>
                                 {scan.current_step_name ? `Step ${scan.current_step}/7 · ${scan.current_step_name}` : 'Starting…'}
                               </div>
-                              <div style={{ height:'6px', background:'#E2E8F0', borderRadius:'999px', overflow:'hidden' }}>
-                                <div style={{ height:'100%', width:`${scan.progress_percent || 0}%`, background:'#0284C7', borderRadius:'999px', transition:'width .5s ease' }} />
+                              <div className="progress-bar">
+                                <div style={{ width:`${scan.progress_percent || 0}%`, transition:'width .5s ease' }} />
                               </div>
                             </>
                           ) : '—'}
@@ -133,7 +133,7 @@ export default function AdminPage() {
                 <div className="table-wrap"><table className="table"><thead><tr><th>Patient</th><th>Code</th><th>Registered</th><th>Status</th><th></th></tr></thead><tbody>
                   {filteredPatients.map(p => (
                     <tr key={p.id}>
-                      <td><div style={{ display:'flex', alignItems:'center', gap:'10px' }}><span style={{ width:'34px', height:'34px', borderRadius:'50%', background:'#E0F2FE', color:'#0369A1', display:'grid', placeItems:'center', fontSize:'12px', fontWeight:800 }}>{p.name?.slice(0,2).toUpperCase()}</span><strong>{p.name}</strong></div></td>
+                      <td><div style={{ display:'flex', alignItems:'center', gap:'10px' }}><span className="record-avatar">{p.name?.slice(0,2).toUpperCase()}</span><strong>{p.name}</strong></div></td>
                       <td style={{ color:'#0F766E', fontWeight:750, fontFamily:'ui-monospace, monospace' }}>{p.patient_code}</td>
                       <td className="muted">{p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}</td>
                       <td><span className="status status-rendered">Active</span></td>
@@ -166,5 +166,5 @@ export default function AdminPage() {
 }
 
 function Stat({ label, value, meta, tone }) {
-  return <div className="stat-card"><div className="stat-label">{label}</div><div className="stat-value" style={{ color:tone }}>{value}</div><div className="stat-meta">{meta}</div></div>
+  return <div className="metric-card"><div className="metric-head"><span>{label}</span><span className="metric-icon" style={{ color:tone, background:`${tone}12` }}>•</span></div><div className="metric-value" style={{ color:tone }}>{value}</div><div className="metric-meta">{meta}</div></div>
 }

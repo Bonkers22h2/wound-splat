@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Image from 'next/image'
 import Navbar from '../../components/Navbar'
 import { scanApi } from '@/lib/api'
 import useWoundViewer from './useWoundViewer'
@@ -40,7 +41,7 @@ export default function ViewerPage() {
 
           {viewer.loading && (
             <div className="viewer-loading">
-              <div className="brand-mark" style={{ marginBottom:'12px' }}>WS</div>
+              <div className="brand-mark" style={{ marginBottom:'12px' }}><Image src="/wound-splat-logo.png" alt="" fill sizes="38px" /></div>
               <p style={{ fontWeight:750 }}>Loading 3D wound model</p>
               <p style={{ fontSize:'12px', color:'#94A3B8', marginTop:'6px' }}>Preparing the reconstruction</p>
             </div>
