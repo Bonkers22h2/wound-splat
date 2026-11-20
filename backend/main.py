@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.paths import OUTPUT_DIR, UPLOAD_DIR
 
@@ -12,11 +12,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.routes import scans, patients, reports, tissue
-app.include_router(patients.router, prefix="/patients", tags=["patients"])
-app.include_router(scans.router, prefix="/scans", tags=["scans"])
-app.include_router(reports.router, prefix="/reports", tags=["reports"])
-app.include_router(tissue.router, prefix="/scans", tags=["tissue"])
+from app.routes import auth, scans, patients, reports, tissue
+app.include_router(
+    patients.router,
+    prefix="/patients",
+    tags=["patients"],
+    dependencies=[Depends(auth.get_current_doctor)],
+)
+
+app.include_router(
+    scans.router,
+    prefix="/scans",
+    tags=["scans"],
+    dependencies=[Depends(auth.get_current_doctor)],
+)
+
+app.include_router(
+    reports.router,
+    prefix="/reports",
+    tags=["reports"],
+    dependencies=[Depends(auth.get_current_doctor)],
+)
+
+app.include_router(
+    tissue.router,
+    prefix="/scans",
+    tags=["tissue"],
+    dependencies=[Depends(auth.get_current_doctor)],
+)
+
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -9,6 +9,8 @@ uvicorn==0.49.0
 python-multipart==0.0.32   # multipart form uploads (video + reference-object fields)
 SQLAlchemy==2.0.50
 pydantic==2.13.4
+email-validator==2.4.0
+pwdlib[argon2]==0.4.2
 
 # --- PDF reports (generate_report.py) ---
 reportlab==4.5.1
