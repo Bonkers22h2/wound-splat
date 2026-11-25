@@ -1,7 +1,7 @@
 # Original versus revised tissue annotations: comparison protocol
 
-Status: implementation and one-epoch smoke verification complete on 2026-11-25;
-full 80-epoch comparison pending final code review.
+Status: all ten 80-epoch models completed and independently verified on
+2026-11-25. Research comparison complete; no application model replacement.
 Work branch: `tissue-necrosis-retraining`.
 
 ## Purpose and annotation provenance
@@ -96,6 +96,46 @@ The change combines a new class and corrections to other labels: any improvement
 cannot be attributed solely to adding necrosis. Do not claim clinical readiness
 or automatically replace the application model.
 
+## Verified results (2026-11-25)
+
+Dice is segmentation overlap, not diagnostic accuracy. The following are
+five-fold means against the same revised held-out masks (higher is better):
+
+| Measure | Original-label training | Revised-label training |
+|---|---:|---:|
+| Shared three-tissue Dice | 66.21% | 65.49% |
+| Shared Dice population SD | 1.25 points | 1.64 points |
+| Fibrin Dice | 58.59% | 57.77% |
+| Granulation Dice | 77.41% | 75.98% |
+| Callus Dice | 62.63% | 62.72% |
+| Necrosis/eschar Dice | Unsupported (0 on positive targets) | 65.67% |
+| Necrosis/eschar IoU | Unsupported | 49.31% |
+
+The new-minus-old shared Dice difference is -0.72 percentage points (population
+SD 1.44 points). The new arm is ahead on shared Dice in two of five folds.
+This is added necrosis capability with a small observed shared-tissue tradeoff,
+not evidence of an across-the-board improvement or a significant difference.
+
+Pooling out-of-fold pixel counts separately gives shared Dice 66.57% old versus
+65.81% new. New necrosis pooled Dice is 66.47%, IoU 49.78%, precision 68.19%
+and recall 64.83%. These pooled values differ from equal-weight fold means.
+Only 19 source images contain necrosis. Six of those images have zero overlap
+between predicted and reference necrosis pixels in their out-of-fold result,
+so the aggregate score must not be read as reliable detection on every wound.
+The limitations above still apply.
+
+All 220 saved out-of-fold predictions were independently rescored against
+revised masks. Coverage, disjoint train/holdout membership, artifact hashes,
+all ten checkpoint metadata records and the training-code fingerprint were
+verified. Reloading new fold 1 reproduced all its saved predictions exactly.
+Original image/mask hashes and the existing application checkpoints/config
+remain unchanged. The detailed local report is
+`experiments/tissue_necrosis_comparison/REPORT.md`; it must not be published.
+
+The current application model is deliberately retained. A separate deployment
+decision must cover five-class compatibility and further validation; do not
+select a favorable CV fold as though it were an independently tested final model.
+
 ## Documentation and privacy
 
 Public-eligible: source, synthetic tests and this aggregate protocol. Review
@@ -136,3 +176,42 @@ aggregate notes and the allowed statistics config, not dataset binaries.
   dependencies (plyfile, reportlab, cv2, fastapi, sqlalchemy, open3d) are absent.
   This is not a claim that the entire repository test suite passed. A detailed
   failure log is retained locally with the execution ledger.
+- 2026-11-25: final code review identified a source-change resume risk. A
+  regression reproduced it; input hashes are now checked before each fold and
+  again before publication. The full tissue suite passes 126 tests. Ten full
+  80-epoch runs started only after this correction.
+- 2026-11-25: all ten full runs completed. Saved predictions and checkpoints
+  passed the independent audit; aggregate results are reported above.
+- A post-training working-tree edit removed the integrity checks. Its origin
+  could not be established; the user reported making no edits. The saved run
+  fingerprint matched the committed, protected implementation. Restoring that
+  implementation resolved the reproduced regression (125 passed / 1 failed
+  before restoration; 126 passed afterward). No retraining or result changes
+  were necessary. No private artifacts were staged, pushed or deployed.
+
+## Reproduction commands
+
+Run from the repository root using the existing, isolated training environment.
+The archive must already be local; the importer does not download or upload data.
+Only import once into a fresh version directory:
+
+```powershell
+.\tissue-venv\Scripts\python.exe -m tissue.import_original_revision --archive "PATH_TO_LOCAL_EXPORT.zip" --baseline-manifest tissue/annotation_work/dataset_manifest.json --output-dir tissue/datasets/original110_necrosis_v1 --review-status approved_user_reported
+```
+
+Run or resume the fixed experiment (a changed data/code/configuration identity
+requires a fresh output directory rather than silently reusing old folds):
+
+```powershell
+.\tissue-venv\Scripts\python.exe -m tissue.compare_annotation_versions --dataset-dir tissue/datasets/original110_necrosis_v1 --historical-results experiments/tissue_comparison_fold_isolated/results.json --output-dir experiments/tissue_necrosis_comparison --epochs 80 --device cuda
+```
+
+Run the synthetic regression suite:
+
+```powershell
+.\tissue-venv\Scripts\python.exe -m pytest tissue/tests -q
+```
+
+The experiment runner saves research artifacts only; the application still uses
+its existing four-output model. Selecting and deploying a replacement requires
+a separate decision and application compatibility work.
