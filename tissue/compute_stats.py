@@ -17,7 +17,7 @@ from tissue.lib.stats import class_weights
 CLASS_NAMES = ["background", "fibrin", "granulation", "callus"]
 
 
-def calculate_training_statistics(pairs):
+def calculate_training_statistics(pairs, class_names=CLASS_NAMES):
     """Calculate preprocessing and loss weights from only the given pairs."""
     pairs = list(pairs)
     if not pairs:
@@ -25,12 +25,17 @@ def calculate_training_statistics(pairs):
     pixel_sum = np.zeros(3)
     pixel_sq_sum = np.zeros(3)
     pixel_total = 0
-    counts = np.zeros(4, dtype=np.int64)
-    images_containing = np.zeros(4, dtype=np.int64)
+    num_classes = len(class_names)
+    counts = np.zeros(num_classes, dtype=np.int64)
+    images_containing = np.zeros(num_classes, dtype=np.int64)
 
     for image_path, mask_path in pairs:
         image = np.array(Image.open(image_path).convert("RGB"))
         mask = np.array(Image.open(mask_path))
+        if (mask.ndim != 2 or not np.issubdtype(mask.dtype, np.integer)
+                or mask.shape != image.shape[:2] or mask.size == 0
+                or np.any(mask < 0) or np.any(mask >= num_classes)):
+            raise ValueError("mask must contain valid class indices and match the image")
         image, mask = resize_pair(image, mask, IMAGE_SIZE)
 
         scaled = image.astype(np.float64) / 255.0
@@ -38,7 +43,7 @@ def calculate_training_statistics(pairs):
         pixel_sq_sum += (scaled.reshape(-1, 3) ** 2).sum(axis=0)
         pixel_total += scaled.shape[0] * scaled.shape[1]
 
-        for c in range(4):
+        for c in range(num_classes):
             n = int((mask == c).sum())
             counts[c] += n
             if n:
@@ -50,9 +55,9 @@ def calculate_training_statistics(pairs):
     frequencies = counts / counts.sum()
 
     config = {
-        "num_classes": 4,
+        "num_classes": num_classes,
         "image_size": IMAGE_SIZE,
-        "class_index_to_name": {str(i): n for i, n in enumerate(CLASS_NAMES)},
+        "class_index_to_name": {str(i): n for i, n in enumerate(class_names)},
         "source": f"DFUTissue Original variant, {len(pairs)} training images only",
         "palette_note": (
             "names per the dataset's own Original/Palette/palette_colorCode.txt: "
