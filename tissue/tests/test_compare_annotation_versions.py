@@ -116,6 +116,29 @@ def test_source_changed_during_final_fold_cannot_publish_complete_result(tmp_pat
     assert not result["complete"]
 
 
+def test_changed_then_restored_training_image_cannot_resume_contaminated_fold(tmp_path, monkeypatch):
+    from PIL import Image
+    runner, dataset, history, output, seen = setup_run(tmp_path, monkeypatch)
+    train = runner.run_training
+    changed = []
+    def mutate_first(training, *args, **kwargs):
+        if not changed:
+            path = training[0][0]
+            changed.append((path, path.read_bytes()))
+            with Image.open(path) as image:
+                array = np.array(image)
+            Image.fromarray(np.roll(array, 1, axis=1)).save(path)
+        return train(training, *args, **kwargs)
+    monkeypatch.setattr(runner, "run_training", mutate_first)
+    with pytest.raises(ValueError, match="hash"):
+        runner.run_comparison(dataset, history, output, epochs=1, device="cpu")
+    changed[0][0].write_bytes(changed[0][1])
+    assert not (output / "old_fold1").exists()
+    monkeypatch.setattr(runner, "run_training", train)
+    finished = runner.run_comparison(dataset, history, output, epochs=1, device="cpu")
+    assert finished["complete"] and len(seen) == 11
+
+
 def test_interrupted_run_keeps_only_completed_folds_and_resumes(tmp_path, monkeypatch):
     runner, dataset, history, output, seen = setup_run(tmp_path, monkeypatch)
     train = runner.run_training

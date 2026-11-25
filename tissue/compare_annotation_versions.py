@@ -191,6 +191,16 @@ def run_comparison(dataset_dir, historical_results, output_dir, epochs=EPOCHS, d
     }
     identity = json_safe(identity)
     identity_hash = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    def verify_inputs():
+        # A fold is only reusable if the claimed inputs remained intact through
+        # its training/evaluation. Reject before publication, not merely at end.
+        load_revision_pairs(dataset_dir, originals)
+        if sha256(manifest_path) != identity["dataset_manifest_sha256"]:
+            raise ValueError("dataset manifest hash changed during run")
+        if sha256(historical_results) != identity["historical_results_sha256"]:
+            raise ValueError("historical results hash changed during run")
+        if code_fingerprint() != identity["code_sha256"]:
+            raise ValueError("training code hash changed during run")
     output = Path(output_dir)
     identity_path = output / "experiment.json"
     if output.exists():
@@ -206,6 +216,7 @@ def run_comparison(dataset_dir, historical_results, output_dir, epochs=EPOCHS, d
         held_revised = [revised_by_name[n] for n in held_names]
         for arm, pairs, class_count, held_train_labels in (
                 ("old", originals, 4, held_original), ("new", revised, 5, held_revised)):
+            verify_inputs()
             directory = output / f"{arm}_fold{fold}"
             if directory.exists():
                 result = _verify_saved(directory, identity_hash, arm, fold, held_names)
@@ -240,6 +251,7 @@ def run_comparison(dataset_dir, historical_results, output_dir, epochs=EPOCHS, d
                               "artifact_sha256": {n: sha256(temporary / n) for n in ("checkpoint.pt", "predictions.npz")}}
                     _atomic_json(temporary / "fold.json", result)
                     _verify_saved(temporary, identity_hash, arm, fold, held_names)
+                    verify_inputs()
                     temporary.rename(directory)
                 finally:
                     if temporary.exists():
@@ -252,11 +264,7 @@ def run_comparison(dataset_dir, historical_results, output_dir, epochs=EPOCHS, d
             # Publish progress as incomplete until final integrity checks pass.
             _atomic_json(output / "results.json", payload)
     # A last integrity check catches source modifications during a long run.
-    load_revision_pairs(dataset_dir, originals)
-    if code_fingerprint() != identity["code_sha256"]:
-        raise ValueError("training code changed during run")
-    if sha256(manifest_path) != identity["dataset_manifest_sha256"]:
-        raise ValueError("dataset manifest changed during run")
+    verify_inputs()
     payload["summary"] = summarize_comparison(payload["runs"])
     payload["complete"] = payload["summary"] is not None
     _atomic_json(output / "results.json", payload)

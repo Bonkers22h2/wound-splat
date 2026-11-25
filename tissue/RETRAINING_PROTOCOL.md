@@ -1,6 +1,7 @@
 # Original versus revised tissue annotations: comparison protocol
 
-Status: dataset audited and experiment planned on 2026-11-25; training has not started.
+Status: implementation and one-epoch smoke verification complete on 2026-11-25;
+full 80-epoch comparison pending final code review.
 Work branch: `tissue-necrosis-retraining`.
 
 ## Purpose and annotation provenance
@@ -123,4 +124,15 @@ aggregate notes and the allowed statistics config, not dataset binaries.
 
 - 2026-11-25: downloaded export audited read-only; original hashes verified;
   exact historical fold match confirmed; review approval recorded; ignore paths
-  checked. Implementation, tests and training remain pending plan approval.
+  checked. User approved native implementation and execution.
+- 2026-11-25: immutable revised dataset imported; configurable five-class
+  training and paired comparison runner implemented. Tissue suite: 125 passed.
+- 2026-11-25: ten one-epoch smoke models completed in a separate output
+  directory. All 220 out-of-fold predictions independently rescored; one new
+  checkpoint reloaded and reproduced all its saved holdout predictions exactly.
+  Original sources and current application artifacts remain unchanged.
+- Repository-wide pytest was attempted in the deliberately separate training
+  environment. Nine backend modules could not be collected because backend
+  dependencies (plyfile, reportlab, cv2, fastapi, sqlalchemy, open3d) are absent.
+  This is not a claim that the entire repository test suite passed. A detailed
+  failure log is retained locally with the execution ledger.
