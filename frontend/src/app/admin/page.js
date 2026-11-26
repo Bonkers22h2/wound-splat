@@ -63,7 +63,10 @@ export default function AdminPage() {
               <h1 className="page-title">Good morning, Dr. Santos</h1>
               <p className="page-subtitle">Monitor scans and support patient wound care.</p>
             </div>
-            <div className="status status-calibrated">GPU active</div>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <Link href="/longitudinal" className="btn btn-primary" style={{ minHeight:'40px' }}>Open longitudinal review</Link>
+              <div className="status status-calibrated">GPU active</div>
+            </div>
           </div>
 
           <div className="grid-4" style={{ marginBottom:'18px' }}>

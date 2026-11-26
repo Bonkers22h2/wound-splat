@@ -16,11 +16,14 @@ export default function Home() {
               tissue analysis, and a complete longitudinal scan history.
             </p>
             <div className="home-actions">
-              <Link href="/patient" className="btn btn-primary" style={{ minHeight:'48px', padding:'11px 20px' }}>
-                Continue as patient
+              <Link href="/login" className="btn btn-primary" style={{ minHeight:'48px', padding:'11px 20px' }}>
+                Sign in
               </Link>
-              <Link href="/admin" className="btn btn-secondary" style={{ minHeight:'48px', padding:'11px 20px' }}>
-                Open clinical workspace
+              <Link href="/dashboard" className="btn btn-secondary" style={{ minHeight:'48px', padding:'11px 20px' }}>
+                Open dashboard
+              </Link>
+              <Link href="/patient" className="btn btn-secondary" style={{ minHeight:'48px', padding:'11px 20px' }}>
+                Patient portal
               </Link>
             </div>
             <details style={{ marginTop:'18px', maxWidth:'610px' }}>
@@ -28,10 +31,14 @@ export default function Home() {
                 Preview the full prototype
               </summary>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:'8px', marginTop:'10px' }}>
+                <Link className="btn btn-secondary" href="/login">Sign in</Link>
+                <Link className="btn btn-secondary" href="/signup">Create account</Link>
+                <Link className="btn btn-secondary" href="/dashboard">Summary dashboard</Link>
                 <Link className="btn btn-secondary" href="/patient">Patient experience</Link>
                 <Link className="btn btn-secondary" href="/admin">Clinical workspace</Link>
                 <Link className="btn btn-secondary" href="/viewer/demo-scan-001">3D wound viewer</Link>
                 <Link className="btn btn-secondary" href="/tissue/demo-scan-001">Tissue analysis</Link>
+                <Link className="btn btn-secondary" href="/longitudinal">Longitudinal review</Link>
               </div>
             </details>
             <div className="home-feature-row">

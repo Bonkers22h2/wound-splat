@@ -75,3 +75,39 @@ export const scanUrls = {
   tissueOverlay: (scanId, version = '') =>
     `${API_BASE}/scans/${scanId}/tissue/overlay${version ? `?v=${version}` : ''}`,
 }
+
+export const dashboardApi = {
+  // Aggregates patient and assessment summaries from existing endpoints.
+  // Can be swapped to GET /api/dashboard/summary once backend endpoint lands.
+  getSummary: async () => {
+    const [patients, queue] = await Promise.all([
+      patientApi.list(),
+      scanApi.adminQueue(),
+    ])
+    if (!Array.isArray(patients) || !Array.isArray(queue)) {
+      throw new Error('Unexpected dashboard response format.')
+    }
+    const patientMap = new Map(patients.map(p => [p.id, p]))
+    const assessments = queue.map(scan => {
+      const patient = patientMap.get(scan.patient_id)
+      return {
+        ...scan,
+        patient_name: patient?.name || 'Patient record',
+        patient_code: patient?.patient_code || scan.patient_id?.slice(0, 8) || '—',
+      }
+    })
+    return {
+      patients,
+      assessments,
+      stats: {
+        totalPatients: patients.length,
+        totalAssessments: assessments.length,
+        activeProcessing: assessments.filter(
+          s => s.status === 'processing' || s.status === 'queued'
+        ).length,
+        completedAssessments: assessments.filter(s => s.status === 'rendered').length,
+        failedAssessments: assessments.filter(s => s.status === 'failed').length,
+      },
+    }
+  },
+}
