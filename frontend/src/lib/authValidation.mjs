@@ -10,7 +10,7 @@ export function validateEmail(email) {
 export function getPasswordChecks(password) {
   const value = String(password || '')
   return {
-    minLength: value.length >= 8,
+    minLength: value.length >= 12,
     hasUpper: /[A-Z]/.test(value),
     hasLower: /[a-z]/.test(value),
     hasNumber: /\d/.test(value),
@@ -43,7 +43,7 @@ export function validateSignupForm({
 }) {
   const errors = {}
 
-  const trimmedName = String(fullName || '').trim()
+  const trimmedName = String(fullName || '').trim().replace(/\s+/g, ' ')
   if (!trimmedName) {
     errors.fullName = 'Full name is required.'
   } else if (trimmedName.length < 2) {
@@ -58,7 +58,7 @@ export function validateSignupForm({
   if (!rawPassword) {
     errors.password = 'Password is required.'
   } else if (!checks.minLength) {
-    errors.password = 'Password must be at least 8 characters long.'
+    errors.password = 'Password must be at least 12 characters long.'
   } else if (!checks.hasUpper) {
     errors.password = 'Password must include at least one uppercase letter.'
   } else if (!checks.hasLower) {

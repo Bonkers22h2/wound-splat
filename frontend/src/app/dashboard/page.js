@@ -1,33 +1,17 @@
 'use client'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import { Icon } from '../components/Icons'
 import { dashboardApi } from '@/lib/api'
 import {
+  clearSession,
   getServerSessionSnapshot,
   getSessionSnapshot,
   logout,
   subscribeAuth,
 } from '@/lib/auth'
-import { DEMO_ASSESSMENTS, DEMO_PATIENTS } from '@/lib/demo'
-
-function buildDemoSummary() {
-  return {
-    patients: DEMO_PATIENTS,
-    assessments: DEMO_ASSESSMENTS,
-    stats: {
-      totalPatients: DEMO_PATIENTS.length,
-      totalAssessments: DEMO_ASSESSMENTS.length,
-      activeProcessing: DEMO_ASSESSMENTS.filter(
-        s => s.status === 'processing' || s.status === 'queued'
-      ).length,
-      completedAssessments: DEMO_ASSESSMENTS.filter(s => s.status === 'rendered').length,
-      failedAssessments: DEMO_ASSESSMENTS.filter(s => s.status === 'failed').length,
-    },
-  }
-}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -39,23 +23,8 @@ export default function DashboardPage() {
 
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [usingDemo, setUsingDemo] = useState(false)
   const [error, setError] = useState('')
-
-  const fetchSummary = useCallback(async () => {
-    try {
-      const data = await dashboardApi.getSummary()
-      setSummary(data)
-      setUsingDemo(false)
-      setError('')
-    } catch {
-      setSummary(buildDemoSummary())
-      setUsingDemo(true)
-      setError('Backend API unavailable — showing preview patient and assessment data.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const [refreshTick, setRefreshTick] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -63,24 +32,26 @@ export default function DashboardPage() {
       .then((data) => {
         if (!active) return
         setSummary(data)
-        setUsingDemo(false)
         setError('')
       })
-      .catch(() => {
+      .catch((err) => {
         if (!active) return
-        setSummary(buildDemoSummary())
-        setUsingDemo(true)
-        setError('Backend API unavailable — showing preview patient and assessment data.')
+        if (err?.status === 401) {
+          clearSession()
+          router.replace('/login?reason=expired&next=/dashboard')
+          return
+        }
+        setError(err?.message || 'Could not load dashboard metrics from the backend.')
       })
       .finally(() => {
         if (active) setLoading(false)
       })
     return () => { active = false }
-  }, [])
+  }, [router, refreshTick])
 
   const handleRefresh = () => {
     setLoading(true)
-    fetchSummary()
+    setRefreshTick(t => t + 1)
   }
 
   const handleLogout = async () => {
@@ -93,19 +64,16 @@ export default function DashboardPage() {
   const stats = summary?.stats || {
     totalPatients: 0,
     totalAssessments: 0,
-    activeProcessing: 0,
     completedAssessments: 0,
+    withMeasurements: 0,
+    queuedAssessments: 0,
+    processingAssessments: 0,
+    activeProcessing: 0,
     failedAssessments: 0,
   }
 
   const latestRendered = assessments.find(item => item.status === 'rendered')
   const previewScanId = latestRendered?.id || 'demo-scan-001'
-  const latestScanDate = assessments[0]?.created_at
-    ? new Date(assessments[0].created_at).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    })
-    : '—'
 
   const assessmentCountByPatient = assessments.reduce((acc, scan) => {
     acc[scan.patient_id] = (acc[scan.patient_id] || 0) + 1
@@ -165,7 +133,7 @@ export default function DashboardPage() {
             <div className="dashboard-header-actions">
               {session && (
                 <span className="status status-calibrated">
-                  {session.role === 'clinician' ? 'Clinician session' : 'Patient session'}
+                  Clinician session
                 </span>
               )}
               <button
@@ -190,23 +158,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {!session && (
-            <div className="dashboard-banner notice notice-warning" style={{ marginBottom: '18px' }}>
+          {error && (
+            <div className="dashboard-banner notice notice-error" role="alert" style={{ marginBottom: '18px' }}>
               <div>
-                <strong>You are viewing the dashboard without an active account session.</strong>
-                <span> Sign in or create an account to save your workspace identity.</span>
-              </div>
-              <div className="dashboard-banner-actions">
-                <Link href="/login" className="btn btn-secondary">Sign in</Link>
-                <Link href="/signup" className="btn btn-primary">Create account</Link>
-              </div>
-            </div>
-          )}
-
-          {usingDemo && error && (
-            <div className="dashboard-banner notice notice-warning" role="status" style={{ marginBottom: '18px' }}>
-              <div>
-                <strong>Preview mode active</strong>
+                <strong>Could not load dashboard data</strong>
                 <span> · {error}</span>
               </div>
               <button type="button" className="btn btn-secondary" onClick={handleRefresh}>
@@ -231,7 +186,9 @@ export default function DashboardPage() {
                 <span className="metric-icon"><Icon name="file" size={16} /></span>
               </div>
               <div className="metric-value">{loading && !summary ? '—' : stats.totalAssessments}</div>
-              <div className="metric-meta">Latest upload {latestScanDate}</div>
+              <div className="metric-meta">
+                {loading && !summary ? 'Loading…' : `${stats.withMeasurements} with measurements`}
+              </div>
             </div>
 
             <div className="metric-card">
@@ -242,7 +199,11 @@ export default function DashboardPage() {
               <div className="metric-value" style={{ color: '#0284C7' }}>
                 {loading && !summary ? '—' : stats.activeProcessing}
               </div>
-              <div className="metric-meta">Queued or processing</div>
+              <div className="metric-meta">
+                {loading && !summary
+                  ? 'Checking status…'
+                  : `${stats.processingAssessments} processing · ${stats.queuedAssessments} queued`}
+              </div>
             </div>
 
             <div className="metric-card">
@@ -289,7 +250,7 @@ export default function DashboardPage() {
               {patients.length === 0 ? (
                 <div className="empty">
                   <div className="empty-icon"><Icon name="patient" size={20} /></div>
-                  <strong>No patients registered</strong>
+                  <strong>{loading ? 'Loading patients…' : 'No patients registered'}</strong>
                   <span className="helper">Register a patient in the Clinical Workspace to begin tracking scans.</span>
                 </div>
               ) : (
@@ -333,7 +294,7 @@ export default function DashboardPage() {
               {assessments.length === 0 ? (
                 <div className="empty">
                   <div className="empty-icon"><Icon name="activity" size={20} /></div>
-                  <strong>No assessments yet</strong>
+                  <strong>{loading ? 'Loading assessments…' : 'No assessments yet'}</strong>
                   <span className="helper">Submitted wound videos will appear here with status and review links.</span>
                 </div>
               ) : (

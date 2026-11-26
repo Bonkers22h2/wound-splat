@@ -1,5 +1,5 @@
 'use client'
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -7,6 +7,7 @@ import { Icon } from './Icons'
 import {
   getServerSessionSnapshot,
   getSessionSnapshot,
+  hydrateSession,
   logout,
   subscribeAuth,
 } from '@/lib/auth'
@@ -27,6 +28,10 @@ export default function Navbar() {
     getSessionSnapshot,
     getServerSessionSnapshot
   )
+
+  useEffect(() => {
+    hydrateSession().catch(() => {})
+  }, [])
 
   const handleLogout = async () => {
     setMenuOpen(false)

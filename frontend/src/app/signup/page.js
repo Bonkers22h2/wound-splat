@@ -62,7 +62,7 @@ export default function SignupPage() {
   }
 
   const checkItems = [
-    ['minLength', 'At least 8 characters'],
+    ['minLength', 'At least 12 characters'],
     ['hasUpper', 'One uppercase letter'],
     ['hasLower', 'One lowercase letter'],
     ['hasNumber', 'One number'],

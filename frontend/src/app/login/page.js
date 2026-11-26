@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import { Icon } from '../components/Icons'
-import { DEMO_ACCOUNTS, login } from '@/lib/auth'
+import { login } from '@/lib/auth'
 import { sanitizeNextPath, validateLoginForm } from '@/lib/authValidation.mjs'
 
 function LoginContent() {
@@ -26,16 +26,6 @@ function LoginContent() {
 
   const validation = validateLoginForm({ email, password })
   const fieldError = (name) => ((submitted || touched[name]) ? validation.errors[name] : '')
-
-  const applyDemoAccount = (targetRole) => {
-    const account = DEMO_ACCOUNTS.find(item => item.role === targetRole)
-    if (!account) return
-    setRole(account.role)
-    setEmail(account.email)
-    setPassword(account.password)
-    setFormError('')
-    setTouched({ email: true, password: true })
-  }
 
   const handleRoleSelect = (nextRole) => {
     setRole(nextRole)
@@ -171,24 +161,8 @@ function LoginContent() {
 
           <div className="auth-demo-box">
             <div className="auth-demo-head">
-              <strong>Demo accounts</strong>
-              <span>Preview locally before backend auth is connected</span>
-            </div>
-            <div className="auth-demo-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => applyDemoAccount('clinician')}
-              >
-                Use Clinician Demo
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => applyDemoAccount('patient')}
-              >
-                Use Patient Demo
-              </button>
+              <strong>Authenticated clinician access</strong>
+              <span>Sessions are verified by FastAPI using an HttpOnly cookie (12-hour limit).</span>
             </div>
           </div>
 

@@ -23,14 +23,14 @@ describe('validateEmail', () => {
 })
 
 describe('getPasswordChecks', () => {
-  it('reports individual password strength flags', () => {
-    assert.deepEqual(getPasswordChecks('abc'), {
-      minLength: false,
-      hasUpper: false,
-      hasLower: true,
-      hasNumber: false,
-    })
+  it('reports individual password strength flags against the 12-char backend rule', () => {
     assert.deepEqual(getPasswordChecks('Clinic123!'), {
+      minLength: false,
+      hasUpper: true,
+      hasLower: true,
+      hasNumber: true,
+    })
+    assert.deepEqual(getPasswordChecks('ClinicPass123!'), {
       minLength: true,
       hasUpper: true,
       hasLower: true,
@@ -61,8 +61,8 @@ describe('validateSignupForm', () => {
   const validPayload = {
     fullName: 'Elena Santos',
     email: 'elena@metrocare.ph',
-    password: 'Clinic123!',
-    confirmPassword: 'Clinic123!',
+    password: 'ClinicPass123!',
+    confirmPassword: 'ClinicPass123!',
     role: 'clinician',
     acceptedTerms: true,
   }
@@ -78,23 +78,23 @@ describe('validateSignupForm', () => {
     assert.equal(shortName.valid, false)
     assert.match(shortName.errors.fullName, /2 characters/i)
 
-    const shortPass = validateSignupForm({ ...validPayload, password: 'Ab1', confirmPassword: 'Ab1' })
+    const shortPass = validateSignupForm({ ...validPayload, password: 'Short123!', confirmPassword: 'Short123!' })
     assert.equal(shortPass.valid, false)
-    assert.match(shortPass.errors.password, /8 characters/i)
+    assert.match(shortPass.errors.password, /12 characters/i)
 
-    const noUpper = validateSignupForm({ ...validPayload, password: 'clinic123', confirmPassword: 'clinic123' })
+    const noUpper = validateSignupForm({ ...validPayload, password: 'clinicpass123!', confirmPassword: 'clinicpass123!' })
     assert.equal(noUpper.valid, false)
     assert.match(noUpper.errors.password, /uppercase/i)
 
-    const noLower = validateSignupForm({ ...validPayload, password: 'CLINIC123', confirmPassword: 'CLINIC123' })
+    const noLower = validateSignupForm({ ...validPayload, password: 'CLINICPASS123!', confirmPassword: 'CLINICPASS123!' })
     assert.equal(noLower.valid, false)
     assert.match(noLower.errors.password, /lowercase/i)
 
-    const noNumber = validateSignupForm({ ...validPayload, password: 'ClinicPass', confirmPassword: 'ClinicPass' })
+    const noNumber = validateSignupForm({ ...validPayload, password: 'ClinicPassword!', confirmPassword: 'ClinicPassword!' })
     assert.equal(noNumber.valid, false)
     assert.match(noNumber.errors.password, /number/i)
 
-    const mismatch = validateSignupForm({ ...validPayload, confirmPassword: 'Different123!' })
+    const mismatch = validateSignupForm({ ...validPayload, confirmPassword: 'DifferentPass123!' })
     assert.equal(mismatch.valid, false)
     assert.equal(mismatch.errors.confirmPassword, 'Passwords do not match.')
   })

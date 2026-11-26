@@ -1,53 +1,98 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import { Icon } from '../components/Icons'
-import { patientApi, scanApi } from '@/lib/api'
-import { DEMO_PATIENT, DEMO_QUEUE } from '@/lib/demo'
+import { extractErrorMessage, patientApi, scanApi } from '@/lib/api'
+import {
+  clearSession,
+  getServerSessionSnapshot,
+  getSessionSnapshot,
+  subscribeAuth,
+} from '@/lib/auth'
 
 export default function AdminPage() {
+  const router = useRouter()
+  const session = useSyncExternalStore(
+    subscribeAuth,
+    getSessionSnapshot,
+    getServerSessionSnapshot
+  )
+
   const [queue, setQueue] = useState([])
   const [patients, setPatients] = useState([])
+  const [summary, setSummary] = useState(null)
   const [newPatient, setNewPatient] = useState({ name:'', patient_code:'' })
   const [message, setMessage] = useState('')
+  const [messageIsError, setMessageIsError] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [refreshTick, setRefreshTick] = useState(0)
   const [tab, setTab] = useState('queue')
   const [query, setQuery] = useState('')
 
-  const loadQueue = async () => {
-    try { setQueue(await scanApi.adminQueue()) }
-    catch { setQueue(DEMO_QUEUE) }
-  }
-  const loadPatients = async () => {
-    try { setPatients(await patientApi.list()) }
-    catch { setPatients([DEMO_PATIENT]) }
-  }
-
   const createPatient = async () => {
-    if (!newPatient.name || !newPatient.patient_code) return
+    if (!newPatient.name.trim() || !newPatient.patient_code.trim()) return
+    setMessage('')
+    setMessageIsError(false)
     try {
       const res = await patientApi.create(newPatient)
-      if (res.ok) {
-        setMessage(`Patient ${newPatient.patient_code} created successfully.`)
-        setNewPatient({ name:'', patient_code:'' })
-        loadPatients()
-      } else {
-        const err = await res.json()
-        setMessage(err.detail || 'Error creating patient.')
+      if (res.status === 401) {
+        clearSession()
+        router.replace('/login?reason=expired&next=/admin')
+        return
       }
-    } catch { setMessage('Could not connect to the server.') }
+      const body = await res.json().catch(() => null)
+      if (res.ok) {
+        setMessage(`Patient ${body?.patient_code || newPatient.patient_code.trim()} created successfully.`)
+        setNewPatient({ name:'', patient_code:'' })
+        setRefreshTick(t => t + 1)
+      } else {
+        setMessageIsError(true)
+        setMessage(extractErrorMessage(body, 'Error creating patient.'))
+      }
+    } catch {
+      setMessageIsError(true)
+      setMessage('Could not connect to the server.')
+    }
   }
 
   useEffect(() => {
-    loadQueue()
-    loadPatients()
-    const interval = setInterval(loadQueue, 5000)
-    return () => clearInterval(interval)
-  }, [])
+    let active = true
+    const load = async () => {
+      try {
+        const [nextSummary, nextQueue, nextPatients] = await Promise.all([
+          scanApi.adminSummary(),
+          scanApi.adminQueue(),
+          patientApi.list(),
+        ])
+        if (!active) return
+        setSummary(nextSummary)
+        setQueue(Array.isArray(nextQueue) ? nextQueue : [])
+        setPatients(Array.isArray(nextPatients) ? nextPatients : [])
+        setLoadError('')
+      } catch (err) {
+        if (!active) return
+        if (err?.status === 401) {
+          clearSession()
+          router.replace('/login?reason=expired&next=/admin')
+          return
+        }
+        setLoadError(err?.message || 'Could not load clinical workspace data.')
+      }
+    }
+    load()
+    const interval = setInterval(load, 5000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [router, refreshTick])
 
-  const processing = queue.filter(s => s.status === 'processing').length
-  const rendered = queue.filter(s => s.status === 'rendered').length
-  const queued = queue.filter(s => s.status === 'queued').length
+  const processing = summary?.processing_status?.processing ?? queue.filter(s => s.status === 'processing').length
+  const rendered = summary?.assessment_summary?.completed ?? queue.filter(s => s.status === 'rendered').length
+  const queued = summary?.processing_status?.queued ?? queue.filter(s => s.status === 'queued').length
+  const patientCount = summary?.patient_count ?? patients.length
   const filteredPatients = patients.filter(p =>
     `${p.name} ${p.patient_code}`.toLowerCase().includes(query.toLowerCase())
   )
@@ -60,7 +105,7 @@ export default function AdminPage() {
           <div className="page-header">
             <div>
               <div className="eyebrow">Clinical workspace</div>
-              <h1 className="page-title">Good morning, Dr. Santos</h1>
+              <h1 className="page-title">{session ? `Welcome, ${session.fullName}` : 'Clinical workspace'}</h1>
               <p className="page-subtitle">Monitor scans and support patient wound care.</p>
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
@@ -69,11 +114,18 @@ export default function AdminPage() {
             </div>
           </div>
 
+          {loadError && (
+            <div className="dashboard-banner notice notice-error" role="alert" style={{ marginBottom:'18px' }}>
+              <div><strong>Could not load workspace data</strong><span> · {loadError}</span></div>
+              <button type="button" className="btn btn-secondary" onClick={() => setRefreshTick(t => t + 1)}>Retry</button>
+            </div>
+          )}
+
           <div className="grid-4" style={{ marginBottom:'18px' }}>
             <Stat label="In processing" value={processing} meta="Active reconstruction" tone="#0284C7" />
             <Stat label="Queued" value={queued} meta="Waiting to start" tone="#0F766E" />
             <Stat label="Completed" value={rendered} meta="Ready for review" tone="#10B981" />
-            <Stat label="Patients" value={patients.length} meta="Registered records" tone="#0F172A" />
+            <Stat label="Patients" value={patientCount} meta="Registered records" tone="#0F172A" />
           </div>
 
           <div className="tabs" style={{ marginBottom:'18px' }}>
@@ -90,7 +142,7 @@ export default function AdminPage() {
             <div className="card">
               <div className="card-header">
                 <h2 className="card-title">Processing queue</h2>
-                <button className="btn btn-secondary" onClick={loadQueue} style={{ minHeight:'36px', padding:'7px 12px' }}>Refresh</button>
+                <button className="btn btn-secondary" onClick={() => setRefreshTick(t => t + 1)} style={{ minHeight:'36px', padding:'7px 12px' }}>Refresh</button>
               </div>
               {queue.length === 0 ? (
                 <div className="empty"><div className="empty-icon">✓</div><strong style={{ color:'#334155', marginBottom:'5px' }}>No active scans</strong><span style={{ fontSize:'13px' }}>New patient submissions will appear here.</span></div>
@@ -157,8 +209,8 @@ export default function AdminPage() {
                   <div className="field"><label className="label" htmlFor="patient-code">Patient code</label><input id="patient-code" className="input" placeholder="e.g. PT-002" value={newPatient.patient_code} onChange={e => setNewPatient({ ...newPatient, patient_code:e.target.value })} /></div>
                 </div>
                 <div className="notice notice-warning" style={{ marginBottom:'16px' }}>Only register a patient after confirming clinic consent and identity.</div>
-                <button className="btn btn-primary" onClick={createPatient} disabled={!newPatient.name || !newPatient.patient_code}>Create patient record</button>
-                {message && <div className="notice notice-success" style={{ marginTop:'12px' }}>{message}</div>}
+                <button className="btn btn-primary" onClick={createPatient} disabled={!newPatient.name.trim() || !newPatient.patient_code.trim()}>Create patient record</button>
+                {message && <div className={`notice ${messageIsError ? 'notice-error' : 'notice-success'}`} role={messageIsError ? 'alert' : 'status'} style={{ marginTop:'12px' }}>{message}</div>}
               </div>
             </div>
           )}
