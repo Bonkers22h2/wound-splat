@@ -3,6 +3,9 @@ import './globals.css'
 export const metadata = {
   title: 'Wound-Splat',
   description: '3D Wound Monitoring System',
+  icons: {
+    icon: '/wound-splat-logo.png',
+  },
 }
 
 export default function RootLayout({ children }) {

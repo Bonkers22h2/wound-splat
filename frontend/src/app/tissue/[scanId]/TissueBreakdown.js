@@ -1,14 +1,13 @@
 'use client'
 import { COLORS } from '@/lib/theme'
 
-// Same colours as the overlay the model produces, which come from the
-// dataset's own palette file: red - fibrin, green - granulation, blue - callus.
+// Clinical tissue legend for the wound review UI.
 const TISSUES = [
-  { key: 'granulation', label: 'Granulation', colour: 'rgb(40,190,60)',
+  { key: 'granulation', label: 'Granulation', colour: 'rgb(16,185,129)',
     note: 'healthy healing tissue' },
-  { key: 'fibrin', label: 'Fibrin', colour: 'rgb(220,40,40)',
+  { key: 'fibrin', label: 'Fibrin', colour: 'rgb(245,158,11)',
     note: 'yellow slough' },
-  { key: 'callus', label: 'Callus', colour: 'rgb(50,90,220)',
+  { key: 'callus', label: 'Callus', colour: 'rgb(59,130,246)',
     note: 'thickened skin at the edge' },
 ]
 
