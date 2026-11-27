@@ -69,6 +69,8 @@ tissue/**
 /tissue/outputs/
 /tissue/datasets/
 /tissue/results/
+# Revised CVAT export: protect it even if copied outside the data directories.
+re-annotation_with_eschar_necrosis.zip
 /tissue/**/[Ll]abeled/
 /tissue/**/[Uu]nlabeled/
 /tissue/**/[Uu]nlabelled/

@@ -10,13 +10,13 @@ BACKGROUND = 0
 TISSUE_CLASSES = (1, 2, 3)  # fibrin, granulation, callus
 
 
-def mean_tissue_dice(per_class):
+def mean_tissue_dice(per_class, tissue_classes=TISSUE_CLASSES):
     """Mean Dice across the tissue classes only, ignoring background.
 
     Classes scored nan (absent from both prediction and label) are skipped
     rather than counted as zero.
     """
-    tissue = np.asarray(per_class, dtype=float)[list(TISSUE_CLASSES)]
+    tissue = np.asarray(per_class, dtype=float)[list(tissue_classes)]
     applicable = tissue[~np.isnan(tissue)]
     if applicable.size == 0:
         return float("nan")  # e.g. an all-background image: nothing to score
@@ -78,6 +78,12 @@ class ScoreAccumulator:
     def update(self, pred, target):
         pred = np.asarray(pred)
         target = np.asarray(target)
+        if pred.shape != target.shape:
+            raise ValueError("prediction and target shapes must match")
+        for array in (pred, target):
+            if (not np.issubdtype(array.dtype, np.integer) or np.any(array < 0)
+                    or np.any(array >= self.num_classes)):
+                raise ValueError("prediction and target labels must be valid class indices")
         for c in range(self.num_classes):
             p = pred == c
             t = target == c

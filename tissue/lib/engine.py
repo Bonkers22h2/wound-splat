@@ -47,7 +47,7 @@ def build_loss(device, statistics=None):
 
 def run_training(
     train_pairs, eval_pairs, seed, device, epochs=EPOCHS, on_epoch=None,
-    model_factory=build_model, statistics=None,
+    model_factory=build_model, statistics=None, num_classes=4,
 ):
     """Train from ImageNet weights and score on `eval_pairs`.
 
@@ -56,6 +56,8 @@ def run_training(
     data it is later scored on.
     """
     set_seed(seed)
+    if statistics is not None and len(statistics["class_weights"]) != num_classes:
+        raise ValueError("class weights must match the model output count")
     train_dataset = TissueDataset(train_pairs, augment=True, seed=seed, statistics=statistics)
     eval_dataset = TissueDataset(eval_pairs, statistics=statistics)
     train_loader = DataLoader(
@@ -64,7 +66,7 @@ def run_training(
     )
     eval_loader = DataLoader(eval_dataset, batch_size=BATCH_SIZE)
 
-    model = model_factory(num_classes=4, pretrained=True).to(device)
+    model = model_factory(num_classes=num_classes, pretrained=True).to(device)
     loss_fn = build_loss(device, statistics=statistics) if statistics is not None else build_loss(device)
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
@@ -88,7 +90,7 @@ def run_training(
         if on_epoch:
             on_epoch(epoch, running / len(train_loader), model)
 
-    return model, evaluate(model, eval_loader, device)
+    return model, evaluate(model, eval_loader, device, num_classes=num_classes)
 
 
 @torch.no_grad()

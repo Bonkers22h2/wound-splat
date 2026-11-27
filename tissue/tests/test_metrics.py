@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pytest
+import pytest
 
 from tissue.lib.metrics import (
     ScoreAccumulator,
@@ -136,3 +137,15 @@ def test_accumulator_reports_nan_for_a_class_never_seen_in_the_dataset():
 
     assert np.isnan(dice[1])  # fibrin never appeared
     assert np.isnan(dice[3])  # callus never appeared
+def test_explicit_four_tissue_mean_keeps_legacy_shared_three_default():
+    from tissue.lib.metrics import mean_tissue_dice
+    scores = [0.1, 0.6, 0.6, 0.6, 1.0]
+    assert mean_tissue_dice(scores) == pytest.approx(0.6)
+    assert mean_tissue_dice(scores, tissue_classes=(1, 2, 3, 4)) == pytest.approx(0.7)
+
+
+@pytest.mark.parametrize("pred,target", [([1, 2], [1]), ([5], [1]), ([-1], [1]), ([1], [5]), ([1.5], [1])])
+def test_accumulator_rejects_invalid_shape_or_labels(pred, target):
+    from tissue.lib.metrics import ScoreAccumulator
+    with pytest.raises(ValueError):
+        ScoreAccumulator(5).update(np.array(pred), np.array(target))

@@ -1,5 +1,6 @@
 import numpy as np
 import inspect
+import pytest
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -164,3 +165,33 @@ def test_run_training_uses_fold_statistics_without_global_file(tmp_path, monkeyp
 
     assert isinstance(model, TinyModel)
     assert 0.0 <= scores["mean_tissue_dice"] <= 1.0
+
+
+def test_training_five_class_head_learns_necrosis(monkeypatch):
+    examples = [(torch.zeros(3, 4, 4), torch.full((4, 4), 4, dtype=torch.long))] * 8
+    monkeypatch.setattr(engine, "TissueDataset", lambda *args, **kwargs: examples)
+    class Tiny(torch.nn.Module):
+        def __init__(self, classes):
+            super().__init__()
+            self.conv = torch.nn.Conv2d(3, classes, 1)
+        def forward(self, x):
+            return self.conv(x)
+    model, scores = engine.run_training([], [], 0, "cpu", epochs=1, num_classes=5,
+        model_factory=lambda num_classes, pretrained: Tiny(num_classes),
+        statistics={"class_weights": [1.0] * 5})
+    assert model.conv.out_channels == 5
+    assert scores["counts"]["target"] == [0, 0, 0, 0, 128]
+
+
+def test_training_rejects_weight_head_mismatch():
+    with pytest.raises(ValueError, match="weight"):
+        engine.run_training([], [], 0, "cpu", epochs=1, num_classes=5,
+                            statistics={"class_weights": [1.0] * 4})
+
+
+def test_old_head_evaluates_on_five_class_truth_without_erasing_necrosis():
+    mask = torch.full((4, 4), 4, dtype=torch.long)
+    result = evaluate(AlwaysPredicts(1, 4), _loader([mask]), "cpu", num_classes=5)
+    assert result["counts"]["target"] == [0, 0, 0, 0, 16]
+    assert result["dice"][1] == 0
+    assert result["dice"][4] == 0

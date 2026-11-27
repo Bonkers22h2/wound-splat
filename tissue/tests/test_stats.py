@@ -1,4 +1,5 @@
 import warnings
+import pytest
 
 import numpy as np
 from PIL import Image
@@ -47,3 +48,24 @@ def test_training_statistics_exclude_held_out_image_and_mask(tmp_path):
     }
     assert statistics["class_weights"] == [1.0, 1.0, 0.0, 0.0]
     assert statistics["train_pixel_counts"] == [65536, 65536, 0, 0]
+
+
+def test_five_class_statistics_include_necrosis(tmp_path):
+    image, mask = tmp_path / "image.png", tmp_path / "mask.png"
+    Image.fromarray(np.full((2, 2, 3), 120, dtype=np.uint8)).save(image)
+    Image.fromarray(np.array([[0, 4], [4, 4]], dtype=np.uint8)).save(mask)
+    stats = compute_stats.calculate_training_statistics(
+        [(image, mask)], class_names=("background", "fibrin", "granulation", "callus", "necrosis_eschar"))
+    assert stats["num_classes"] == 5
+    assert stats["train_pixel_counts"] == [16384, 0, 0, 0, 49152]
+    assert stats["class_weights"] == [1.5, 0, 0, 0, 0.5]
+
+
+@pytest.mark.parametrize("array", [np.array([[4]], dtype=np.uint8), np.array([[-1]], dtype=np.int32),
+                                   np.zeros((1, 1, 3), dtype=np.uint8)])
+def test_statistics_reject_invalid_masks_before_resize(tmp_path, array):
+    image, mask = tmp_path / "image.png", tmp_path / "mask.tiff"
+    Image.fromarray(np.zeros((1, 1, 3), dtype=np.uint8)).save(image)
+    Image.fromarray(array).save(mask)
+    with pytest.raises(ValueError, match="mask"):
+        compute_stats.calculate_training_statistics([(image, mask)])
