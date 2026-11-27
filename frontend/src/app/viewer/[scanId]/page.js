@@ -1,72 +1,74 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Image from 'next/image'
 import Navbar from '../../components/Navbar'
 import { scanApi } from '@/lib/api'
 import useWoundViewer from './useWoundViewer'
 import OrientationControls from './OrientationControls'
 import ViewerSidebar from './ViewerSidebar'
-
-const VIEWER_BACKGROUND = '#0a0f0d'
+import { DEMO_MEASUREMENTS } from '@/lib/demo'
 
 export default function ViewerPage() {
   const { scanId } = useParams()
+  return <ScanViewer key={scanId} scanId={scanId} />
+}
+
+function ScanViewer({ scanId }) {
+  const demoMode = String(scanId).startsWith('demo-')
   const viewer = useWoundViewer(scanId)
 
-  const [measurements, setMeasurements] = useState(null)
+  const [measurements, setMeasurements] = useState(demoMode ? DEMO_MEASUREMENTS : null)
 
   useEffect(() => {
-    scanApi.measurements(scanId).then(setMeasurements).catch(() => {})
-  }, [scanId])
+    if (demoMode) return
+    let active = true
+    scanApi.measurements(scanId).then(data => {
+      if (active) setMeasurements(data)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [scanId, demoMode])
 
   const viewerReady = !viewer.loading && !viewer.error
 
   return (
     <>
       <Navbar />
-      <div style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
-
-        {/* 3D viewer canvas + overlays */}
-        <div style={{ flex: 1, position: 'relative', background: VIEWER_BACKGROUND }}>
+      <div className="viewer-shell">
+        <div className="viewer-canvas">
           <div ref={viewer.mountRef} style={{ width: '100%', height: '100%' }} />
+          {String(scanId).startsWith('demo-') && (
+            <div style={{ position:'absolute', inset:0, display:'grid', placeItems:'center', pointerEvents:'none' }}>
+              <div style={{ width:'min(44vw,380px)', aspectRatio:'1', borderRadius:'50%', background:'radial-gradient(circle at 48% 48%,#10B981 0 18%,#F59E0B 19% 40%,#3B82F6 41% 47%,rgba(16,185,129,.20) 48% 67%,rgba(59,130,246,.12) 68% 76%,transparent 77%)', boxShadow:'0 26px 80px rgba(16,185,129,.20), inset 0 0 30px rgba(255,255,255,.10)', transform:'perspective(600px) rotateX(8deg)' }}>
+                <div style={{ position:'relative', width:'100%', height:'100%', borderRadius:'50%', border:'1px solid rgba(226,232,240,.12)' }} />
+              </div>
+            </div>
+          )}
 
           {viewer.loading && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(10,15,13,0.8)', color: '#1D9E75', flexDirection: 'column', gap: '12px',
-            }}>
-              <div style={{ fontSize: '32px' }}>⚕</div>
-              <p style={{ fontWeight: 600 }}>Loading 3D wound model...</p>
-              <p style={{ fontSize: '13px', color: '#6b7280' }}>This may take a moment</p>
+            <div className="viewer-loading">
+              <div className="brand-mark" style={{ marginBottom:'12px' }}><Image src="/wound-splat-logo.png" alt="" fill sizes="38px" /></div>
+              <p style={{ fontWeight:750 }}>Loading 3D wound model</p>
+              <p style={{ fontSize:'12px', color:'#94A3B8', marginTop:'6px' }}>Preparing the reconstruction</p>
             </div>
           )}
 
           {viewer.error && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(10,15,13,0.9)', color: 'white', flexDirection: 'column', gap: '12px',
-            }}>
-              <div style={{ fontSize: '32px' }}>⚠️</div>
-              <p style={{ fontWeight: 600 }}>{viewer.error}</p>
+            <div className="viewer-loading">
+              <div className="status status-failed" style={{ marginBottom:'10px' }}>Model unavailable</div>
+              <p style={{ fontWeight:750 }}>{viewer.error}</p>
             </div>
           )}
 
           {viewerReady && (
-            <OrientationControls onRotate={viewer.rotateModel} onReset={viewer.resetRotation} />
-          )}
-
-          {viewerReady && (
-            <div style={{
-              position: 'absolute', bottom: '16px', left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.6)', color: '#9ca3af', padding: '6px 16px',
-              borderRadius: '999px', fontSize: '12px',
-            }}>
-              🖱️ Drag to rotate · Scroll to zoom · Right-click to pan
+            <div className="viewer-controls">
+              <OrientationControls onRotate={viewer.rotateModel} onReset={viewer.resetRotation} />
             </div>
           )}
 
+          {viewerReady && (
+            <div className="viewer-hint">Drag to rotate · Scroll to zoom · Right-click to pan</div>
+          )}
         </div>
 
         <ViewerSidebar

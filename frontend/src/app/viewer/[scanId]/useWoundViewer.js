@@ -15,6 +15,7 @@ const DEFAULT_CAMERA_Z = 22
  * buttons affect them equally.
  */
 export default function useWoundViewer(scanId) {
+  const demoMode = String(scanId || '').startsWith('demo-')
   const mountRef = useRef(null)
   const groupRef = useRef(null) // rotation group shared by all views
   const pointsRef = useRef(null) // wound point-cloud object (default view)
@@ -26,7 +27,7 @@ export default function useWoundViewer(scanId) {
   const centerRef = useRef(null) // original geometry center, reused to align the mesh
   const scaleRef = useRef(null) // normalization scale, reused to align the mesh
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!demoMode)
   const [error, setError] = useState(null)
   const [smoothSurface, setSmoothSurface] = useState(false)
   const [meshLoading, setMeshLoading] = useState(false)
@@ -36,6 +37,7 @@ export default function useWoundViewer(scanId) {
   const [fullLoading, setFullLoading] = useState(false)
 
   useEffect(() => {
+    if (demoMode) return
     let disposed = false
     let renderer = null
     let animationFrame = null
@@ -164,7 +166,7 @@ export default function useWoundViewer(scanId) {
         renderer.domElement.remove()
       }
     }
-  }, [scanId])
+  }, [scanId, demoMode])
 
   // Show whichever point cloud the fullScene flag selects (used when leaving
   // the mesh/splat views, so "Show Points" returns to what the user had).

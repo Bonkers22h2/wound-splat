@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db import Patient
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationInfo, field_validator
 import uuid
 
 router = APIRouter()
@@ -10,6 +10,15 @@ router = APIRouter()
 class PatientCreate(BaseModel):
     name: str
     patient_code: str
+
+    @field_validator("name", "patient_code")
+    @classmethod
+    def normalize_non_empty(cls, value: str, info: ValidationInfo) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            label = "Name" if info.field_name == "name" else "Patient code"
+            raise ValueError(f"{label} is required")
+        return normalized
 
 @router.post("")
 def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):

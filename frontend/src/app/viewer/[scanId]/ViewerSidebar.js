@@ -7,8 +7,8 @@ const toggleButtonStyle = (active, busy) => ({
   width: '100%',
   background: active ? COLORS.primary : 'white',
   color: active ? 'white' : COLORS.primary,
-  padding: '10px',
-  borderRadius: '8px',
+  padding: '11px 12px',
+  borderRadius: '7px',
   textAlign: 'center',
   fontWeight: 600,
   fontSize: '14px',
@@ -101,8 +101,8 @@ export default function ViewerSidebar({
 }) {
   return (
     <div style={{
-      width: '280px', background: 'white', borderLeft: `1px solid ${COLORS.border}`,
-      padding: '1.5rem', overflowY: 'auto',
+      width: '320px', background: 'white', borderLeft: `1px solid ${COLORS.border}`,
+      padding: '22px', overflowY: 'auto',
     }}>
       <h2 style={{ fontWeight: 700, fontSize: '16px', marginBottom: '0.5rem' }}>3D Wound View</h2>
       <p style={{ color: COLORS.textMuted, fontSize: '13px', marginBottom: '1.5rem' }}>

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.db import Patient, Scan, ScanStatus
+from app.models.db import Measurement, Patient, Scan, ScanStatus
 from app.paths import UPLOAD_DIR
 from app.services.mesh_builder import InsufficientPointsError, build_wound_mesh
 from app.services.point_cloud_builder import build_full_point_cloud
@@ -245,3 +245,43 @@ def get_queue(db: Session = Depends(get_db)):
         }
         for scan in scans
     ]
+
+
+@router.get("/admin/summary")
+def get_admin_summary(db: Session = Depends(get_db)):
+    total_assessments = db.query(Scan).count()
+
+    completed_assessments = (
+        db.query(Scan)
+        .filter(Scan.status == ScanStatus.RENDERED)
+        .count()
+    )
+
+    measurement_count = db.query(Measurement).count()
+
+    return {
+        "patient_count": db.query(Patient).count(),
+        "assessment_summary": {
+            "total": total_assessments,
+            "completed": completed_assessments,
+            "with_measurements": measurement_count,
+        },
+        "processing_status": {
+            "queued": (
+                db.query(Scan)
+                .filter(Scan.status == ScanStatus.QUEUED)
+                .count()
+            ),
+            "processing": (
+                db.query(Scan)
+                .filter(Scan.status == ScanStatus.PROCESSING)
+                .count()
+            ),
+            "completed": completed_assessments,
+            "failed": (
+                db.query(Scan)
+                .filter(Scan.status == ScanStatus.FAILED)
+                .count()
+            ),
+        },
+    }
